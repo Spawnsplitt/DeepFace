@@ -5,13 +5,18 @@ import dlib
 import numpy as np
 from pinecone import Pinecone, ServerlessSpec
 import tkinter as tk
-from tkinter import font, messagebox, simpledialog
+from tkinter import font
 import winreg
 import warnings
-from PIL import Image, ImageTk
+
 import sys
 import time
 import threading
+import win32gui
+import win32con
+
+
+
 
 
 
@@ -40,7 +45,9 @@ class GesichtserkennungApp:
         master.title("Gesichtserkennung")
         self.master.geometry("800x300")
         
-        custom_font = font.Font(family="Arial", size=16)
+        custom_font = font.Font(family="Arial", size=12)
+
+        
 
         # Dlib-Modelle laden
         try:
@@ -48,7 +55,7 @@ class GesichtserkennungApp:
             self.dlib_face_recognition_model = dlib.face_recognition_model_v1("dlib_face_recognition_resnet_model_v1.dat")
             self.dlib_shape_predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
         except Exception as e:
-            messagebox.showerror("Fehler", f"Fehler beim Laden der Dlib-Modelle: {e}")
+            self.schreibe_registry("Fehler", f"Fehler beim Laden der Dlib-Modelle: {e}", "Fertig")
             sys.exit(1)
 
         self.label = tk.Label(master, text="Willkommen zur Gesichtserkennung!", font=custom_font)
@@ -72,8 +79,19 @@ class GesichtserkennungApp:
         
         self.running_thread = None  # Thread für die Aktualisierung des Registry-Werts
 
+        self.master.iconify()
+
         # Starten des Hintergrund-Threads für die Registry-Aktualisierung
         self.start_registry_thread()
+
+    # Funktion zum Minimieren des Fensters
+    def minimize_window():
+        hwnd = win32gui.GetForegroundWindow()
+        win32gui.ShowWindow(hwnd, win32con.SW_MINIMIZE)
+
+    # Fenster beim Start minimieren
+    if hasattr(sys, 'frozen'):
+        minimize_window()
 
     def set_registry_value(self, root, path, name, value):
         try:
@@ -120,32 +138,36 @@ class GesichtserkennungApp:
         registry_path = r"SOFTWARE\Tanoffice\facescan"
         registry_value_name = "IsRunning"
         registry_function_name = "Funktion"
-        """Setzt den Registry-Wert 'IsRunning' alle 5 Sekunden auf 'True'."""
+        
         while True:
             try:
+                # Setzt den Registry-Wert 'IsRunning' auf 1
                 self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_value_name, 1)
-                print("Registry-Wert gesetzt")
+                print("Registry-Wert 'IsRunning' gesetzt")
+
                 current_value = self.get_registry_value(registry_path, registry_function_name)
-                
+
                 if current_value == 1:
-                    self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_function_name, 0)
                     self.zeige_webcam_fuer_upruefung()
+                    self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_function_name, 0)
                     
                 elif current_value == 2:
-                    self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_function_name, 0)
                     self.zeige_webcam_fuer_neues_kundenbild()
-                    
+                    self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_function_name, 0)
+
                 elif current_value == 3:
-                    self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_function_name, 0)
                     self.loesche_kundendaten()
-                    
-                elif current_value == 4:
                     self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_function_name, 0)
+
+                elif current_value == 4:
                     self.beenden()
-                
-                # Intervall für die Registry-Prüfung (z.B. alle 5 Sekunden)
+                    self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_function_name, 0)
+                    
+
+
+                # Intervall für die Registry-Prüfung (z.B. alle 1 Sekunde)
                 time.sleep(1)
-                
+
             except Exception as e:
                 print(f"Fehler beim Setzen des Registry-Werts: {e}")
                 time.sleep(1)
@@ -186,8 +208,13 @@ class GesichtserkennungApp:
 
     # Funktion zum Löschen von Kundendaten
     def loesche_kundendaten(self):
+
+        registry_path = r"SOFTWARE\Tanoffice\facescan"
+        registry_function_name = "ErkannterKunde"
+
+        name = self.lese_registry_wert(registry_path, registry_function_name)
+
         # Benutzer nach dem Kundennamen fragen
-        name = simpledialog.askstring("Kundenname", "Geben Sie den Namen des Kunden ein, den Sie löschen möchten:")
         if not name:
             return
 
@@ -197,7 +224,7 @@ class GesichtserkennungApp:
             os.remove(bild_pfad)
             print(f"Bild '{name}.jpg' wurde gelöscht.")
         else:
-            messagebox.showwarning("Warnung", f"Bild für '{name}' wurde nicht gefunden.")
+            self.schreibe_registry("Fehler", "1", f"Bild für '{name}' wurde nicht gefunden.", "Fertig")
 
         # Vektor in Pinecone löschen
         try:
@@ -205,44 +232,60 @@ class GesichtserkennungApp:
             index.delete(ids=[name])
             print(f"Vektor für {name} erfolgreich aus Pinecone entfernt.")
             self.schreibe_registry(name, "0", f"Kundendaten für '{name}' wurden erfolgreich gelöscht.", "Fertig")
-            messagebox.showinfo("Erfolg", f"Kundendaten für '{name}' wurden erfolgreich gelöscht.")
         except Exception as e:
             fehler_text = f"Fehler beim Löschen des Vektors in Pinecone: {e}"
             self.schreibe_registry(name, "1", fehler_text, "Fehlgeschlagen")
-            messagebox.showerror("Fehler", fehler_text)
+            
+
+        self.master.iconify()
 
 
     def zeige_webcam_fuer_upruefung(self):
+
         registry_path = r"SOFTWARE\Tanoffice\facescan"
         registry_value_name = "Funktion"
 
         self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_value_name, 1)
 
         """Funktion zum Starten der Webcam für die Nutzerüberprüfung."""
-        self.video_capture = cv2.VideoCapture(0)
+        self.video_capture = cv2.VideoCapture(0, cv2.CAP_DSHOW)
         if not self.video_capture.isOpened():
-            messagebox.showerror("Fehler", "Webcam konnte nicht geöffnet werden.")
+            self.schreibe_registry("Fehler", "1", "Webcam konnte nicht geöffnet werden", "Fertig")
             return
 
         while True:
             ret, frame = self.video_capture.read()
-            # Anzeige der A nweisungen auf dem Kamerabild
-            cv2.putText(frame, "Druecken Sie <Enter> zum Vergleichen", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
-            cv2.putText(frame, "Druecken Sie <Esc> zum Beenden", (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
-            cv2.imshow('Webcam', frame)
             if not ret:
                 break
-            cv2.imshow('Webcam', frame)
+            
+            #Bildhöhe und Breite
+            height, width, channels = frame.shape
+
+            #Weise Fläche am unteren Rand hinzufügen
+            white_stripe_heigtht = 50
+            new_frame = np.vstack([frame, np.ones((white_stripe_heigtht, width, 3), dtype=np.uint8) * 255])
+
+            #Anzeige der Anweisungen auf der weisen Fläche
+            cv2.putText(new_frame, "<Esc> Beenden                             <Enter> Vergleichen", (10, height + 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv2.LINE_AA)
+            
+            #OpenCV-Bild anzeigen
+            cv2.imshow('Webcam', new_frame)
+
+
+            # Tastatureingaben verarbeiten
             key = cv2.waitKey(1) & 0xFF
-            if key == 13:
-                # Das aktuelle Frame wird für den Vergleich verwendet
+            if key == 13:  # Enter-Taste
                 self.vergleiche_gesicht_mit_pinecone(frame)
-                break  # Einmaliger Vergleich, dann Schleife beenden
-            elif key == 27:
                 break
+            elif key == 27:  # Escape-Taste
+                break
+
         self.video_capture.release()
         cv2.destroyAllWindows()
 
+        self.master.iconify()
+    
 
     def lade_alle_kundenbilder(self):
         index = pc.Index("face-recognition-index")
@@ -301,13 +344,13 @@ class GesichtserkennungApp:
                 erkannter_kunde = best_match["id"]
                 distance = best_match["score"]
                 self.schreibe_registry(erkannter_kunde, "0", f"Kunde erkannt mit Distanz: {distance:.2f}", "Fertig")
-                messagebox.showinfo("Kunde erkannt", f"Erkannter Kunde: {erkannter_kunde}\nDistanz: {distance:.2f}")
+                
             else:
                 self.schreibe_registry("Fehler", "1", "Kein Kunde erkannt", "Fertig")
-                messagebox.showinfo("Kein Kunde erkannt", "Kein übereinstimmender Kunde wurde erkannt.")
+                
         else:
             self.schreibe_registry("Fehler", "1", "Kein Gesicht erkannt", "Fertig")
-            messagebox.showwarning("Kein Gesicht", "Es konnte kein Gesicht erkannt werden.")
+            
 
     def vergleiche_gesicht_mit_alle_kundenbilder(self, frame):
         bilder = self.lade_alle_kundenbilder()
@@ -316,48 +359,70 @@ class GesichtserkennungApp:
             self.vergleiche_gesicht_mit_pinecone(frame)
         else:
             self.schreibe_registry("Fehler", "1", "Keine Kundenbilder gefunden.", "Fertig")
-            messagebox.showerror("Fehler", "Keine Kundenbilder gefunden.")
+            
     
 
     def zeige_webcam_fuer_neues_kundenbild(self):
-        self.video_capture = cv2.VideoCapture(0)
+        
+        self.video_capture = cv2.VideoCapture(0, cv2.CAP_DSHOW)
         if not self.video_capture.isOpened():
             self.schreibe_registry("Fehler", "1", "Kamera konnte nicht geöffnet werden.", "Fertig")
-            messagebox.showerror("Fehler", "Kamera konnte nicht geöffnet werden.")
             return
-        
-        self.label.config(text="Drücken Sie 's', um das Kundenbild zu speichern oder 'q', um zu beenden.")
         
         while True:
             ret, frame = self.video_capture.read()
             if not ret:
-                self.schreibe_registry("Fehler", "1", "Fehler beim Erfassen des Bildes.", "Fertig")
                 break
+
+            #Bildgröße und Höhe anpassen
+            height, width, channels = frame.shape
+
+            #Weise Fläche
+            white_stripe_height = 50
+            new_frame = np.vstack([frame, np.ones((white_stripe_height, width, 3), dtype=np.uint8) * 255])
+
+             #Anzeige der Anweisungen auf der weisen Fläche
+            cv2.putText(new_frame, "<Esc> Beenden                             <Enter> Speichern", (20, height + 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv2.LINE_AA)
             
-            cv2.putText(frame, "Druecken Sie 's' zum Speichern", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
-            cv2.putText(frame, "Druecken Sie 'q' zum Beenden", (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
-            cv2.imshow('Webcam', frame)
+            # OpenCV Fenster anzeigen
+            cv2.imshow('Webcam', new_frame)
+
+           # Tastatureingaben verarbeiten
             key = cv2.waitKey(1) & 0xFF
-            
-            if key == ord('s'):
-                self.frame = frame  # Speichere das aktuelle Frame
-                self.speichere_neues_kundenbild(frame)  # Speichere das Bild
+            if key == 13:  # Enter-Taste
+                self.speichere_neues_kundenbild(frame)
                 break
-            elif key == ord('q'):
+            elif key == 27:  # Escape-Taste
                 break
+
         self.video_capture.release()
         cv2.destroyAllWindows()
+        self.master.iconify()
+
 
     def speichere_neues_kundenbild(self, frame):
-        name = simpledialog.askstring("Neuer Kunde", "Geben Sie den Namen des Kunden ein:")
-        if not name:
-            return
+            registry_path = r"SOFTWARE\Tanoffice\facescan"
+            registry_function = "ErkannterKunde"
+
+            # Holen des Kundennamens aus der Registry
+            name = self.get_registry_value(registry_path, registry_function)
+            if not name:
+                print("Kein erkannter Kunde in der Registry.")
+                return
+
+            # Speichern des Kundenbildes
+            dateiname = os.path.join(self.deepface_ordner, f"{name}.jpg")
+            cv2.imwrite(dateiname, frame)
+            print(f"Kundenbild für {name} wurde erfolgreich gespeichert.")
+            
+            # Optional: Indexieren des Kundenbildes in Pinecone, falls gewünscht
+            self.index_kundenbild_in_pinecone(name, frame)
+
+
+
+
         
-        dateiname = os.path.join(self.deepface_ordner, f"{name}.jpg")
-        cv2.imwrite(dateiname, frame)
-        print(f"Kundenbild für {name} wurde erfolgreich gespeichert.")
-        
-        self.index_kundenbild_in_pinecone(name, frame)
 
     def index_kundenbild_in_pinecone(self, name, frame):
         index = pc.Index("face-recognition-index")
@@ -366,10 +431,9 @@ class GesichtserkennungApp:
             index.upsert([(name, embedding.tolist())])
             print(f"Vektor für {name} erfolgreich in Pinecone gespeichert.")
             self.schreibe_registry(name, "0", f"Kundenbild für '{name}' erfolgreich gespeichert.", "Fertig")
-            messagebox.showinfo("Erfolg", f"Kundenbild für '{name}' erfolgreich gespeichert.")
         else:
             self.schreibe_registry(name, "1", f"Fehler beim Berechnen des Embeddings für '{name}'", "Fehlgeschlagen")
-            messagebox.showerror("Fehler", f"Fehler beim Berechnen des Embeddings für '{name}'")
+            
 
 # Tkinter Hauptprogramm starten
 root = tk.Tk()
