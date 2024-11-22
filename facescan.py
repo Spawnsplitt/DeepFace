@@ -8,6 +8,7 @@ import tkinter as tk
 from tkinter import font
 import winreg
 import warnings
+import shutil
 
 import sys
 import time
@@ -41,6 +42,12 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 class GesichtserkennungApp:
     def __init__(self, master):
+        registry_path = r"SOFTWARE\Tanoffice\facescan"
+        registry_status = "Zwischenstatus"
+        registry_function_name = "ErgebnisText"
+
+        
+
         self.master = master
         master.title("Gesichtserkennung")
         self.master.geometry("800x300")
@@ -55,7 +62,8 @@ class GesichtserkennungApp:
             self.dlib_face_recognition_model = dlib.face_recognition_model_v1("dlib_face_recognition_resnet_model_v1.dat")
             self.dlib_shape_predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
         except Exception as e:
-            self.schreibe_registry("Fehler", f"Fehler beim Laden der Dlib-Modelle: {e}", "Fertig")
+            self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_function_name, f"Fehler beim Laden der Dlib-Modelle: {e}")
+            self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_status, "Fertig")
             sys.exit(1)
 
         self.label = tk.Label(master, text="Willkommen zur Gesichtserkennung!", font=custom_font)
@@ -74,7 +82,7 @@ class GesichtserkennungApp:
         self.quit_button.pack(padx=5, pady=5)
         
         self.video_capture = None
-        self.deepface_ordner = self.lese_registry_wert(r"SOFTWARE\Tanoffice\facescan", "FotoPfad") or r"C:\TanOffice\DeepFace_Kunden"
+        self.deepface_ordner = self.lese_registry_wert(r"SOFTWARE\Tanoffice\facescan", "FotoPfad")
         self.frame = None  # Zum Speichern des letzten Frames
         
         self.running_thread = None  # Thread für die Aktualisierung des Registry-Werts
@@ -83,6 +91,11 @@ class GesichtserkennungApp:
 
         # Starten des Hintergrund-Threads für die Registry-Aktualisierung
         self.start_registry_thread()
+
+
+
+    
+
 
     # Funktion zum Minimieren des Fensters
     def minimize_window():
@@ -134,43 +147,56 @@ class GesichtserkennungApp:
 
 
 
+
     def registriere_lebensstatus(self):
+        """
+        Scannt dauerhaft die Registry auf Änderungen und reagiert entsprechend.
+        """
         registry_path = r"SOFTWARE\Tanoffice\facescan"
         registry_value_name = "IsRunning"
         registry_function_name = "Funktion"
-        
-        while True:
-            try:
-                # Setzt den Registry-Wert 'IsRunning' auf 1
-                self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_value_name, 1)
-                print("Registry-Wert 'IsRunning' gesetzt")
 
-                current_value = self.get_registry_value(registry_path, registry_function_name)
+        try:
+            # Setzt den Registry-Wert 'IsRunning' auf 1, um anzuzeigen, dass das Programm läuft
+            self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_value_name, 1)
+            print("Registry-Wert 'IsRunning' gesetzt")
 
-                if current_value == 1:
-                    self.zeige_webcam_fuer_upruefung()
-                    self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_function_name, 0)
-                    
-                elif current_value == 2:
-                    self.zeige_webcam_fuer_neues_kundenbild()
-                    self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_function_name, 0)
+            while True:
+                try:
+                    # Liest den aktuellen Wert des 'Funktion'-Eintrags aus der Registry
+                    current_value = self.get_registry_value(registry_path, registry_function_name)
 
-                elif current_value == 3:
-                    self.loesche_kundendaten()
-                    self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_function_name, 0)
+                    if current_value == 1:
+                        print("Funktion 1 erkannt: zeige_webcam_fuer_upruefung")
+                        self.zeige_webcam_fuer_upruefung()
+                        self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_function_name, 0)
 
-                elif current_value == 4:
-                    self.beenden()
-                    self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_function_name, 0)
-                    
+                    elif current_value == 2:
+                        print("Funktion 2 erkannt: zeige_webcam_fuer_neues_kundenbild")
+                        self.zeige_webcam_fuer_neues_kundenbild()
+                        self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_function_name, 0)
 
+                    elif current_value == 3:
+                        print("Funktion 3 erkannt: loesche_kundendaten")
+                        self.loesche_kundendaten()
+                        self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_function_name, 0)
 
-                # Intervall für die Registry-Prüfung (z.B. alle 1 Sekunde)
-                time.sleep(1)
+                    elif current_value == 4:
+                        print("Funktion 4 erkannt: beenden")
+                        self.beenden()
+                        self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_function_name, 0)
+                        break  # Schleife beenden, wenn Funktion 4 gesetzt ist
 
-            except Exception as e:
-                print(f"Fehler beim Setzen des Registry-Werts: {e}")
-                time.sleep(1)
+                    # Eine kurze Pause, um die CPU-Auslastung zu minimieren
+                    time.sleep(0.5)
+
+                except Exception as inner_exception:
+                    print(f"Fehler beim Auslesen der Registry: {inner_exception}")
+                    time.sleep(1)
+
+        except Exception as outer_exception:
+            print(f"Fehler beim Setzen des Registry-Werts: {outer_exception}")
+            time.sleep(1)
 
 
 
@@ -210,9 +236,11 @@ class GesichtserkennungApp:
     def loesche_kundendaten(self):
 
         registry_path = r"SOFTWARE\Tanoffice\facescan"
-        registry_function_name = "ErkannterKunde"
+        registry_function_name = "ErgebnisText"
+        registry_kunde = "ErkannterKunde"
+        registry_status = "Zwischenstatus"
 
-        name = self.lese_registry_wert(registry_path, registry_function_name)
+        name = self.lese_registry_wert(registry_path, registry_kunde)
 
         # Benutzer nach dem Kundennamen fragen
         if not name:
@@ -224,17 +252,20 @@ class GesichtserkennungApp:
             os.remove(bild_pfad)
             print(f"Bild '{name}.jpg' wurde gelöscht.")
         else:
-            self.schreibe_registry("Fehler", "1", f"Bild für '{name}' wurde nicht gefunden.", "Fertig")
+            self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_function_name, f"Bild für '{name}' wurde nicht gefunden.")
+            self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_status, "Fertig")
 
         # Vektor in Pinecone löschen
         try:
             index = pc.Index("face-recognition-index")
             index.delete(ids=[name])
             print(f"Vektor für {name} erfolgreich aus Pinecone entfernt.")
-            self.schreibe_registry(name, "0", f"Kundendaten für '{name}' wurden erfolgreich gelöscht.", "Fertig")
+            self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_function_name, f"Kundendaten für '{name}' wurden erfolgreich gelöscht.")
+            self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_status, "Fertig")
         except Exception as e:
-            fehler_text = f"Fehler beim Löschen des Vektors in Pinecone: {e}"
-            self.schreibe_registry(name, "1", fehler_text, "Fehlgeschlagen")
+            self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_function_name, f"Fehler beim Löschen des Vektors in Pinecone: {e}")
+            self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_status, "Fehlgeschlagen")
+            
             
 
         self.master.iconify()
@@ -242,15 +273,22 @@ class GesichtserkennungApp:
 
     def zeige_webcam_fuer_upruefung(self):
 
+        
+
         registry_path = r"SOFTWARE\Tanoffice\facescan"
         registry_value_name = "Funktion"
+        registry_function_name = "ErgebnisText"
+        
+        registry_status = "Zwischenstatus"
+
 
         self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_value_name, 1)
 
         """Funktion zum Starten der Webcam für die Nutzerüberprüfung."""
         self.video_capture = cv2.VideoCapture(0, cv2.CAP_DSHOW)
         if not self.video_capture.isOpened():
-            self.schreibe_registry("Fehler", "1", "Webcam konnte nicht geöffnet werden", "Fertig")
+            self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_function_name, "Webcam konnte nicht geöffnet werden")
+            self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_status, "Fehlgeschlagen")
             return
 
         while True:
@@ -271,6 +309,12 @@ class GesichtserkennungApp:
             
             #OpenCV-Bild anzeigen
             cv2.imshow('Webcam', new_frame)
+
+        
+            current_value = self.get_registry_value(registry_path, registry_value_name)
+            if current_value == 4:
+                break
+           
 
 
             # Tastatureingaben verarbeiten
@@ -333,21 +377,36 @@ class GesichtserkennungApp:
             print(f"Kein Gesicht erkannt im Bild.")
             return None
 
+    
+
     def vergleiche_gesicht_mit_pinecone(self, frame):
+
+        registry_path = r"SOFTWARE\Tanoffice\facescan"
+        registry_function = "Score"
+
+        str_Uebereinstimmung = self.get_registry_value(registry_path, registry_function)
+        Uebereinstimmung= float(str_Uebereinstimmung)
+
         index = pc.Index("face-recognition-index")
 
         embedding = self.berechne_embedding(frame)
         if embedding is not None:
+            # Pinecone-Abfrage
             result = index.query(vector=embedding.tolist(), top_k=1, include_values=True, approximate=True)
             if result["matches"]:
                 best_match = result["matches"][0]
                 erkannter_kunde = best_match["id"]
-                distance = best_match["score"]
-                self.schreibe_registry(erkannter_kunde, "0", f"Kunde erkannt mit Distanz: {distance:.2f}", "Fertig")
-                
+                score = best_match["score"]
+
+                print(score)
+
+                # Überprüfung auf 100 % Übereinstimmung
+                if score >= Uebereinstimmung:  # Score für perfekte Übereinstimmung
+                    self.schreibe_registry(erkannter_kunde, "0", f"Kunde erkannt mit perfekter Übereinstimmung", "Fertig")
+                else:
+                    self.schreibe_registry("Fehler", "1", f"Keine perfekte Übereinstimmung. Score: {score:.2f}", "Fertig")
             else:
                 self.schreibe_registry("Fehler", "1", "Kein Kunde erkannt", "Fertig")
-                
         else:
             self.schreibe_registry("Fehler", "1", "Kein Gesicht erkannt", "Fertig")
             
@@ -419,10 +478,6 @@ class GesichtserkennungApp:
             # Optional: Indexieren des Kundenbildes in Pinecone, falls gewünscht
             self.index_kundenbild_in_pinecone(name, frame)
 
-
-
-
-        
 
     def index_kundenbild_in_pinecone(self, name, frame):
         index = pc.Index("face-recognition-index")
