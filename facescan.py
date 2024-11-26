@@ -17,36 +17,69 @@ import win32gui
 import win32con
 
 
+class RegistryHandler:
+    def get_registry_value(self, key_path, value_name):
+        try:
+            # Öffne den Schlüssel im Lesezugriff
+            registry_key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_READ)
+            
+            # Lese den Wert des angegebenen Wertes
+            value, regtype = winreg.QueryValueEx(registry_key, value_name)
+            print(f"Registry value: {value}")
+            
+            # Schließe den Schlüssel
+            winreg.CloseKey(registry_key)
+            
+            return value
+        except FileNotFoundError:
+            print(f"Registry Key nicht gefunden: {key_path}\\{value_name}")
+            return None
+        except Exception as e:
+            print(f"Fehler beim Lesen der Registry: {e}")
+            return None
+
+# Instanz der Klasse erstellen
+registry_handler = RegistryHandler()
+
+# Registry-Wert abrufen
+registry_path = r"SOFTWARE\Tanoffice\facescan"
+key = registry_handler.get_registry_value(registry_path, "API_KEY")
+
+if key is None:
+    print("API-Schlüssel nicht gefunden")
+    exit(1)
 
 
-
-
-# Pinecone initialisieren
+        # Pinecone initialisieren
 pc = Pinecone(
-    api_key="6ba67da3-f42a-4c9b-af51-a55ef5d139e4"  #API-Schlüssel
-)
-
-# Überprüfen, ob der Index existiert, und erstellen, falls nicht
-if 'face-recognition-index' not in pc.list_indexes().names():
-    pc.create_index(
-        name='face-recognition-index',
-        dimension=1536,  # Setze die Dimension entsprechend deinen Embeddings
-        metric='euclidean',
-        spec=ServerlessSpec(
-            cloud='aws',
-            region='us-east-1'
+        api_key=key  #API-Schlüssel
         )
-    )
+
+        # Überprüfen, ob der Index existiert, und erstellen, falls nicht
+if 'face-recognition-index' not in pc.list_indexes().names():
+            pc.create_index(
+                name='face-recognition-index',
+                dimension=1536,  # Setze die Dimension entsprechend deinen Embeddings
+                metric='euclidean',
+                spec=ServerlessSpec(
+                    cloud='aws',
+                    region='us-east-1'
+                )
+            )
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
+
+
+
+
+
+
 
 class GesichtserkennungApp:
     def __init__(self, master):
         registry_path = r"SOFTWARE\Tanoffice\facescan"
         registry_status = "Zwischenstatus"
         registry_function_name = "ErgebnisText"
-
-        
 
         self.master = master
         master.title("Gesichtserkennung")
@@ -117,28 +150,28 @@ class GesichtserkennungApp:
         except Exception as e:
             print(f"Fehler beim Schreiben in die Registry: {e}")
 
-
     def get_registry_value(self, key_path, value_name):
-        try:
-            # Öffne den Schlüssel im Lesezugriff
-            registry_key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_READ)
-            
-            # Lese den Wert des angegebenen Wertes
-            value, regtype = winreg.QueryValueEx(registry_key, value_name)
-            print(f"Registry value: {value}")
-            
-            # Schließe den Schlüssel
-            winreg.CloseKey(registry_key)
-            
-            return value
-        except FileNotFoundError:
-            print(f"Registry key or value not found: {key_path}\\{value_name}")
-            return None
-        except Exception as e:
-            print(f"Error reading registry: {e}")
-            return None
+            try:
+                # Öffne den Schlüssel im Lesezugriff
+                registry_key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_READ)
+                
+                # Lese den Wert des angegebenen Wertes
+                value, regtype = winreg.QueryValueEx(registry_key, value_name)
+                print(f"Registry value: {value}")
+                
+                # Schließe den Schlüssel
+                winreg.CloseKey(registry_key)
+                
+                return value
+            except FileNotFoundError:
+                print(f"Registry key or value not found: {key_path}\\{value_name}")
+                return None
+            except Exception as e:
+                print(f"Error reading registry: {e}")
+                return None
 
 
+    
     def start_registry_thread(self):
         """Startet den Hintergrund-Thread, der alle 5 Sekunden den Registry-Wert setzt."""
         self.running_thread = threading.Thread(target=self.registriere_lebensstatus)
