@@ -2,10 +2,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import cv2
 import os
 import dlib
-import numpy as np
+import numpy as np 
 from pinecone import Pinecone, ServerlessSpec
 import tkinter as tk
-from tkinter import font
+from tkinter import font, messagebox
 import winreg
 import warnings
 import shutil
@@ -18,6 +18,20 @@ import win32con
 
 
 class RegistryHandler:
+    def set_registry_value_global(self, key_path, value_name, Value):
+        try:
+            # Öffne den Registry-Schlüssel (oder erstelle ihn, falls er nicht existiert)
+            registry_key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_WRITE)
+            # Setze den Wert
+            winreg.SetValueEx(registry_key, value_name, 0, winreg.REG_SZ, Value)
+            # Schlüssel schließen
+            winreg.CloseKey(registry_key)
+            return Value
+        
+        except Exception as e:
+            print(f"Fehler beim Schreiben in die Registry-verfummelt: {e}")
+            return None
+
     def get_registry_value(self, key_path, value_name):
         try:
             # Öffne den Schlüssel im Lesezugriff
@@ -32,22 +46,33 @@ class RegistryHandler:
             
             return value
         except FileNotFoundError:
-            print(f"Registry Key nicht gefunden: {key_path}\\{value_name}")
             return None
         except Exception as e:
             print(f"Fehler beim Lesen der Registry: {e}")
             return None
+        
+    
 
-# Instanz der Klasse erstellen
+#Klasse RegistryHandler() wird funktional gemacht
 registry_handler = RegistryHandler()
+
+
+
 
 # Registry-Wert abrufen
 registry_path = r"SOFTWARE\Tanoffice\facescan"
+registry_ErgebnisText = "ErgebnisText"
+registry_Ergebnis = "Ergebnis"
+
+
+registry_handler.set_registry_value_global(registry_path, registry_ErgebnisText, "Fehler: Problem mit API-Schlüssel")
+#print(f"schreibe Registry 1 : {result}")
+result = registry_handler.set_registry_value_global(registry_path, registry_Ergebnis, "1")
+print(f"schreibe Registry 2 : {result}") 
+
+
 key = registry_handler.get_registry_value(registry_path, "API_KEY")
 
-if key is None:
-    print("API-Schlüssel nicht gefunden")
-    exit(1)
 
 
         # Pinecone initialisieren
@@ -55,7 +80,8 @@ pc = Pinecone(
         api_key=key  #API-Schlüssel
         )
 
-        # Überprüfen, ob der Index existiert, und erstellen, falls nicht
+      
+
 if 'face-recognition-index' not in pc.list_indexes().names():
             pc.create_index(
                 name='face-recognition-index',
@@ -69,6 +95,8 @@ if 'face-recognition-index' not in pc.list_indexes().names():
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
+registry_handler.set_registry_value_global(registry_path, registry_ErgebnisText, "API-KEY Korrekt")
+registry_handler.set_registry_value_global(registry_path, registry_Ergebnis, "0")
 
 
 
@@ -80,12 +108,18 @@ class GesichtserkennungApp:
         registry_path = r"SOFTWARE\Tanoffice\facescan"
         registry_status = "Zwischenstatus"
         registry_function_name = "ErgebnisText"
+        registry_function_value = "Funktion"
 
         self.master = master
         master.title("Gesichtserkennung")
         self.master.geometry("800x300")
         
         custom_font = font.Font(family="Arial", size=12)
+
+       
+        if not self.check_webcam():
+            print("Webcam nicht gefunden. Das Programm wird beendet.")
+            sys.exit(1)
 
         
 
@@ -125,9 +159,36 @@ class GesichtserkennungApp:
         # Starten des Hintergrund-Threads für die Registry-Aktualisierung
         self.start_registry_thread()
 
+    def check_webcam(self):
+        cap = cv2.VideoCapture(0)
+
+        if not cap.isOpened():
+            print("Fehler", "Webcam nicht gefunden")
+            return False
+
+        else:
+            print("Webcam gefunden")
+            cap.release()
+            return True
 
 
-    
+    def check_webcam_still_alive(self):
+        cap = cv2.VideoCapture(0)
+        if not cap.isOpened():
+            print("Webcam wurde getrennt.")
+            return False
+        cap.release()
+        return True
+
+        
+    def monitor_webcam(self):
+        while self.running_thread:  # Überprüfe ein Flag statt einer Endlosschleife
+            if not self.check_webcam_still_alive():
+                print("Webcam wurde getrennt. Programm wird beendet.")
+                self.beenden()
+                return
+            time.sleep(2)
+
 
 
     # Funktion zum Minimieren des Fensters
@@ -148,7 +209,7 @@ class GesichtserkennungApp:
             # Schlüssel schließen
             winreg.CloseKey(key)
         except Exception as e:
-            print(f"Fehler beim Schreiben in die Registry: {e}")
+            print(f"Fehler beim Schreiben in die Registry (verfummelt): {e}")
 
     def get_registry_value(self, key_path, value_name):
             try:
@@ -537,3 +598,5 @@ class GesichtserkennungApp:
 root = tk.Tk()
 app = GesichtserkennungApp(root)
 root.mainloop()
+
+

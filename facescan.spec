@@ -3,10 +3,10 @@
 
 a = Analysis(
     ['facescan.py'],
-    pathex=['.'],
+    pathex=[],
     binaries=[],
-    datas=[('C:/Users/Azubi/AppData/Local/Packages/PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0/LocalCache/local-packages/Python312/site-packages/pinecone', 'pinecone')],
-    hiddenimports=['dlib', 'PIL', 'pinecone', 'tkinter', 'cv2', 'numpy'],
+    datas=[('C:\\Users\\Azubi\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python312\\site-packages\\pinecone\\__version__', 'pinecone')],
+    hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
