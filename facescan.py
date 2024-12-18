@@ -118,6 +118,11 @@ class GesichtserkennungApp:
 
        
         if not self.check_webcam():
+            registry_path = r"SOFTWARE\Tanoffice\facescan"
+            registry_function_name = "ErgebnisText"
+
+
+            self.set_registry_value_sz(winreg.HKEY_CURRENT_USER, registry_path, registry_function_name, "Webcam nicht gefunden")
             print("Webcam nicht gefunden. Das Programm wird beendet.")
             sys.exit(1)
 
@@ -163,6 +168,11 @@ class GesichtserkennungApp:
         cap = cv2.VideoCapture(0)
 
         if not cap.isOpened():
+
+            registry_path = r"SOFTWARE\Tanoffice\facescan"
+            registry_function_name = "ErgebnisText"
+
+            self.set_registry_value_sz(winreg.HKEY_CURRENT_USER, registry_path, registry_function_name, "Webcam nicht gefunden")
             print("Fehler", "Webcam nicht gefunden")
             return False
 
@@ -173,8 +183,14 @@ class GesichtserkennungApp:
 
 
     def check_webcam_still_alive(self):
+
+        registry_path = r"SOFTWARE\Tanoffice\facescan"
+        registry_function_name = "ErgebnisText"
+
+
         cap = cv2.VideoCapture(0)
         if not cap.isOpened():
+            self.set_registry_value_sz(winreg.HKEY_CURRENT_USER, registry_path, registry_function_name, "Webcam wurde getrennt")
             print("Webcam wurde getrennt.")
             return False
         cap.release()
@@ -189,6 +205,16 @@ class GesichtserkennungApp:
                 return
             time.sleep(2)
 
+    def set_registry_value_sz(self, root, path, name, value):
+        try:
+            # Öffne den Registry-Schlüssel (oder erstelle ihn, falls er nicht existiert)
+            key = winreg.CreateKey(root, path)
+            # Setze den Wert
+            winreg.SetValueEx(key, name, 0, winreg.REG_SZ, value)
+            # Schlüssel schließen
+            winreg.CloseKey(key)
+        except Exception as e:
+            print(f"Fehler beim Schreiben in die Registry (verfummelt): {e}")
 
 
     # Funktion zum Minimieren des Fensters
