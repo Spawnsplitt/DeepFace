@@ -1,3 +1,11 @@
+"""
+Version: 1.0.0
+Date: 2024-12-18
+Description: Dieses Skript führt eine Gesichtserkennung durch.
+"""
+
+
+
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import cv2
 import os
@@ -164,6 +172,9 @@ class GesichtserkennungApp:
         # Starten des Hintergrund-Threads für die Registry-Aktualisierung
         self.start_registry_thread()
 
+    
+
+
     def check_webcam(self):
         cap = cv2.VideoCapture(0)
 
@@ -302,7 +313,13 @@ class GesichtserkennungApp:
                         self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_function_name, 0)
 
                     elif current_value == 4:
-                        print("Funktion 4 erkannt: beenden")
+                        print("Funktion 4 erkannt: Abbruch")
+                        self.abbruch()
+                        self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_function_name, 0)
+                        break  # Schleife beenden, wenn Funktion 4 gesetzt ist
+
+                    elif current_value == 5:
+                        print("Funktion 5 erkannt: Beenden")
                         self.beenden()
                         self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_function_name, 0)
                         break  # Schleife beenden, wenn Funktion 4 gesetzt ist
@@ -322,12 +339,35 @@ class GesichtserkennungApp:
 
 
     def beenden(self):
+
+        registry_path = r"SOFTWARE\Tanoffice\facescan"
+        registry_value_name = "Funktion"
+   
+
         """Setzt den Wert von 'IsRunning' auf False, wenn die Anwendung geschlossen wird."""
         try:
-            self.set_registry_value(winreg.HKEY_CURRENT_USER, r"SOFTWARE\Tanoffice\facescan", "IsRunning", 0)
+            self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_value_name, 5)
         except Exception as e:
             print(f"Fehler beim Setzen des Registry-Werts bei Beenden: {e}")
         self.master.quit()  # Beendet das Tkinter-Fenster
+
+
+
+    def abbruch(self):
+        registry_path = r"SOFTWARE\Tanoffice\facescan"
+        registry_value_name = "Funktion"
+        registry_ErgebnisText = "ErgebnisText"
+
+        """Setzt den Wert von 'IsRunning' auf False und schließt nur das Fenster."""
+        try:
+            self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_value_name, 4)
+            
+        except Exception as e:
+            print(f"Fehler beim Setzen des Registry-Werts bei Beenden: {e}")
+        
+        # Schließt nur das aktuelle Fenster, aber das Programm läuft weiter.
+        self.master.destroy() 
+
 
    
 
@@ -411,6 +451,8 @@ class GesichtserkennungApp:
             self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_status, "Fehlgeschlagen")
             return
 
+        
+
         while True:
             ret, frame = self.video_capture.read()
             if not ret:
@@ -429,6 +471,8 @@ class GesichtserkennungApp:
             
             #OpenCV-Bild anzeigen
             cv2.imshow('Webcam', new_frame)
+
+
 
         
             current_value = self.get_registry_value(registry_path, registry_value_name)
@@ -623,6 +667,15 @@ class GesichtserkennungApp:
 # Tkinter Hauptprogramm starten
 root = tk.Tk()
 app = GesichtserkennungApp(root)
+
+ # Fenster immer im Vordergrund
+root.wm_attributes("-topmost", True)
+
+    # Fokus setzen
+root.focus_force()
+
+
+
 root.mainloop()
 
 
