@@ -17,6 +17,7 @@ from tkinter import font, messagebox
 import winreg
 import warnings
 import shutil
+import ctypes
 
 import sys
 import time
@@ -321,7 +322,7 @@ class GesichtserkennungApp:
                     elif current_value == 5:
                         print("Funktion 5 erkannt: Beenden")
                         self.beenden()
-                        self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_function_name, 0)
+                        
                         break  # Schleife beenden, wenn Funktion 4 gesetzt ist
 
                     # Eine kurze Pause, um die CPU-Auslastung zu minimieren
@@ -347,6 +348,8 @@ class GesichtserkennungApp:
         """Setzt den Wert von 'IsRunning' auf False, wenn die Anwendung geschlossen wird."""
         try:
             self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_value_name, 5)
+            self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, "IsRunning", 0)
+            self.set_registry_value_sz(winreg.HKEY_CURRENT_USER, registry_path, "ErgebnisText", "Programm wurde beendet")
         except Exception as e:
             print(f"Fehler beim Setzen des Registry-Werts bei Beenden: {e}")
         self.master.quit()  # Beendet das Tkinter-Fenster
@@ -358,15 +361,17 @@ class GesichtserkennungApp:
         registry_value_name = "Funktion"
         registry_ErgebnisText = "ErgebnisText"
 
-        """Setzt den Wert von 'IsRunning' auf False und schließt nur das Fenster."""
+        """Setzt den Wert von 'Funktion' auf 4 und schließt nur das OpenCV-Fenster."""
         try:
+            result = self.get_registry_value(registry_path, registry_value_name)
             self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_value_name, 4)
-            
+            self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_value_name, 0)
+            self.set_registry_value_sz(winreg.HKEY_CURRENT_USER, registry_path, registry_ErgebnisText, f"Funktion {result} wurde abgebrochen")
         except Exception as e:
-            print(f"Fehler beim Setzen des Registry-Werts bei Beenden: {e}")
-        
-        # Schließt nur das aktuelle Fenster, aber das Programm läuft weiter.
-        self.master.destroy() 
+            print(f"Fehler beim Setzen des Registry-Werts beim Abbrechen: {e}")
+
+        # Schließt nur das OpenCV-Fenster mit dem Namen 'Webcam'
+        cv2.destroyWindow('Webcam') 
 
 
    
@@ -432,16 +437,12 @@ class GesichtserkennungApp:
 
 
     def zeige_webcam_fuer_upruefung(self):
-
-        
-
         registry_path = r"SOFTWARE\Tanoffice\facescan"
         registry_value_name = "Funktion"
         registry_function_name = "ErgebnisText"
-        
         registry_status = "Zwischenstatus"
 
-
+        # Registry-Wert setzen
         self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_value_name, 1)
 
         """Funktion zum Starten der Webcam für die Nutzerüberprüfung."""
@@ -451,35 +452,49 @@ class GesichtserkennungApp:
             self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_status, "Fehlgeschlagen")
             return
 
-        
+        # Bildschirmdimensionen abrufen
+        root = tk.Tk()
+        screen_width = root.winfo_screenwidth()
+        screen_height = root.winfo_screenheight()
+        root.destroy()
 
         while True:
             ret, frame = self.video_capture.read()
             if not ret:
                 break
-            
-            #Bildhöhe und Breite
+
+            # Bildhöhe und Breite
             height, width, channels = frame.shape
 
-            #Weise Fläche am unteren Rand hinzufügen
-            white_stripe_heigtht = 50
-            new_frame = np.vstack([frame, np.ones((white_stripe_heigtht, width, 3), dtype=np.uint8) * 255])
+            # Weise Fläche am unteren Rand hinzufügen
+            white_stripe_height = 50
+            new_frame = np.vstack([frame, np.ones((white_stripe_height, width, 3), dtype=np.uint8) * 255])
 
-            #Anzeige der Anweisungen auf der weisen Fläche
+            # Anzeige der Anweisungen auf der weißen Fläche
             cv2.putText(new_frame, "<Esc> Beenden                             <Enter> Vergleichen", (10, height + 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv2.LINE_AA)
-            
-            #OpenCV-Bild anzeigen
+
+            # OpenCV-Bild anzeigen
             cv2.imshow('Webcam', new_frame)
 
+            # Fenstergröße anpassen
+            window_width = new_frame.shape[1]
+            window_height = new_frame.shape[0]
 
+            # Fenster zentrieren
+            pos_x = (screen_width - window_width) // 2
+            pos_y = (screen_height - window_height) // 2
+            cv2.moveWindow('Webcam', pos_x, pos_y)
 
-        
+            # Fenster immer im Vordergrund halten
+            hwnd = ctypes.windll.user32.FindWindowW(None, "Webcam")  # Fenster mit Namen "Webcam" suchen
+            if hwnd:
+                ctypes.windll.user32.SetWindowPos(hwnd, -1, pos_x, pos_y, 0, 0, 0x0001 | 0x0040)  # HWND_TOPMOST (-1) setzen
+
+            # Registry-Wert abfragen
             current_value = self.get_registry_value(registry_path, registry_value_name)
             if current_value == 4:
-                break
-           
-
+                self.abbruch()
 
             # Tastatureingaben verarbeiten
             key = cv2.waitKey(1) & 0xFF
@@ -487,13 +502,14 @@ class GesichtserkennungApp:
                 self.vergleiche_gesicht_mit_pinecone(frame)
                 break
             elif key == 27:  # Escape-Taste
+                self.abbruch()
                 break
 
         self.video_capture.release()
         cv2.destroyAllWindows()
 
         self.master.iconify()
-    
+        
 
     def lade_alle_kundenbilder(self):
         index = pc.Index("face-recognition-index")
@@ -586,47 +602,67 @@ class GesichtserkennungApp:
     
 
     def zeige_webcam_fuer_neues_kundenbild(self):
-
-
         registry_path = r"SOFTWARE\Tanoffice\facescan"
         registry_value_name = "Funktion"
 
-        
+        # Webcam öffnen
         self.video_capture = cv2.VideoCapture(0, cv2.CAP_DSHOW)
         if not self.video_capture.isOpened():
             self.schreibe_registry("Fehler", "1", "Kamera konnte nicht geöffnet werden.", "Fertig")
             return
-        
+
+        # Bildschirmdimensionen abrufen
+        root = tk.Tk()
+        screen_width = root.winfo_screenwidth()
+        screen_height = root.winfo_screenheight()
+        root.destroy()
+
         while True:
             ret, frame = self.video_capture.read()
             if not ret:
                 break
 
-            #Bildgröße und Höhe anpassen
+            # Bildhöhe und Breite abrufen
             height, width, channels = frame.shape
 
-            #Weise Fläche
+            # Weise Fläche am unteren Rand hinzufügen
             white_stripe_height = 50
             new_frame = np.vstack([frame, np.ones((white_stripe_height, width, 3), dtype=np.uint8) * 255])
 
-             #Anzeige der Anweisungen auf der weisen Fläche
+            # Anzeige der Anweisungen auf der weißen Fläche
             cv2.putText(new_frame, "<Esc> Beenden                             <Enter> Speichern", (20, height + 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv2.LINE_AA)
-            
-            # OpenCV Fenster anzeigen
+
+            # OpenCV-Fenster anzeigen
             cv2.imshow('Webcam', new_frame)
-            
+
+            # Fenstergröße anpassen
+            window_width = new_frame.shape[1]
+            window_height = new_frame.shape[0]
+
+            # Fenster zentrieren
+            pos_x = (screen_width - window_width) // 2
+            pos_y = (screen_height - window_height) // 2
+            cv2.moveWindow('Webcam', pos_x, pos_y)
+
+            # Fenster immer im Vordergrund halten
+            hwnd = ctypes.windll.user32.FindWindowW(None, "Webcam")  # Fenster mit Namen "Webcam" suchen
+            if hwnd:
+                ctypes.windll.user32.SetWindowPos(hwnd, -1, pos_x, pos_y, 0, 0, 0x0001 | 0x0040)  # HWND_TOPMOST (-1) setzen
+
+            # Registry-Wert abfragen
             current_value = self.get_registry_value(registry_path, registry_value_name)
             if current_value == 4:
+                self.abbruch()
                 break
 
-
-           # Tastatureingaben verarbeiten
+            # Tastatureingaben verarbeiten
             key = cv2.waitKey(1) & 0xFF
             if key == 13:  # Enter-Taste
-                self.speichere_neues_kundenbild(frame)
+                self.speichere_kundenbild(frame)  # Bild speichern
                 break
             elif key == 27:  # Escape-Taste
+                self.abbruch()
                 break
 
         self.video_capture.release()
