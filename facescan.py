@@ -351,6 +351,7 @@ class GesichtserkennungApp:
             self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_value_name, 5)
             self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, "IsRunning", 0)
             self.set_registry_value_sz(winreg.HKEY_CURRENT_USER, registry_path, "ErgebnisText", "Programm wurde beendet")
+            self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_value_name, 0)
         except Exception as e:
             print(f"Fehler beim Setzen des Registry-Werts bei Beenden: {e}")
         self.master.quit()  # Beendet das Tkinter-Fenster
@@ -453,30 +454,53 @@ class GesichtserkennungApp:
             self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_status, "Fehlgeschlagen")
             return
 
-        # Vollbildfenster erstellen
-        cv2.namedWindow('Webcam', cv2.WND_PROP_FULLSCREEN)
-        cv2.setWindowProperty('Webcam', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+        # Bildschirmauflösung abrufen
+        user32 = ctypes.windll.user32
+        screen_width = user32.GetSystemMetrics(0)  # Bildschirmbreite
+        screen_height = user32.GetSystemMetrics(1)  # Bildschirmhöhe
 
-        # Fenster immer im Vordergrund halten und den Desktop sperren
-        hwnd = ctypes.windll.user32.FindWindowW(None, "Webcam")
-        if hwnd:
-            ctypes.windll.user32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0040)  # HWND_TOPMOST (-1)
+        # OpenCV-Fenster vorbereiten
+        cv2.namedWindow('Webcam', cv2.WINDOW_NORMAL)
+        cv2.setWindowProperty('Webcam', cv2.WND_PROP_TOPMOST, 1)  # Fenster bleibt im Vordergrund
 
         while True:
             ret, frame = self.video_capture.read()
+
             if not ret:
+                print("Fehler beim Abrufen des Webcam-Bildes!")  # Debugging-Ausgabe
                 break
 
-            # Bildhöhe und Breite
-            height, width, channels = frame.shape
+            # Überprüfe, ob das Bild leer ist
+            if frame is None or frame.size == 0:
+                print("Das aufgerufene Bild ist leer!")  # Debugging-Ausgabe
+                break
 
-            # Weiße Leiste für Anweisungen hinzufügen
+            # Bildhöhe und Breite abrufen
+            height, width, _ = frame.shape
+
+            # Weiße Leiste am unteren Rand hinzufügen
             white_stripe_height = 50
             new_frame = np.vstack([frame, np.ones((white_stripe_height, width, 3), dtype=np.uint8) * 255])
 
-            # Anzeige der Anweisungen auf der weißen Fläche
-            cv2.putText(new_frame, "<Esc> Beenden                             <Enter> Vergleichen", (10, height + 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv2.LINE_AA)
+            # Anweisungen auf der weißen Fläche anzeigen
+            cv2.putText(new_frame, "<Esc> Beenden                             <Enter> Vergleichen",
+                        (10, height + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv2.LINE_AA)
+
+            # Fenstergröße und Position berechnen
+            window_width = new_frame.shape[1]
+            window_height = new_frame.shape[0]
+            pos_x = (screen_width - window_width) // 2
+            pos_y = (screen_height - window_height) // 2
+
+            # Fenster anpassen und zentrieren
+            cv2.resizeWindow('Webcam', window_width, window_height)
+            cv2.moveWindow('Webcam', pos_x, pos_y)
+
+            # Fenster immer im Vordergrund halten und unverschiebbar machen
+            hwnd = ctypes.windll.user32.FindWindowW(None, "Webcam")
+            if hwnd:
+                ctypes.windll.user32.SetWindowPos(hwnd, -1, pos_x, pos_y, window_width, window_height, 0x0001 | 0x0040)
+                ctypes.windll.user32.SetWindowLongW(hwnd, -16, ctypes.windll.user32.GetWindowLongW(hwnd, -16) & ~0x00040000)
 
             # OpenCV-Bild anzeigen
             cv2.imshow('Webcam', new_frame)
@@ -601,10 +625,13 @@ class GesichtserkennungApp:
             return
 
         # Bildschirmdimensionen abrufen
-        root = tk.Tk()
-        screen_width = root.winfo_screenwidth()
-        screen_height = root.winfo_screenheight()
-        root.destroy()
+        user32 = ctypes.windll.user32
+        screen_width = user32.GetSystemMetrics(0)  # Breite des Bildschirms
+        screen_height = user32.GetSystemMetrics(1)  # Höhe des Bildschirms
+
+        # OpenCV-Fenster erstellen
+        cv2.namedWindow('Webcam', cv2.WINDOW_NORMAL)
+        cv2.setWindowProperty('Webcam', cv2.WND_PROP_TOPMOST, 1)  # Fenster immer im Vordergrund halten
 
         while True:
             ret, frame = self.video_capture.read()
@@ -614,7 +641,7 @@ class GesichtserkennungApp:
             # Bildhöhe und Breite abrufen
             height, width, channels = frame.shape
 
-            # Weise Fläche am unteren Rand hinzufügen
+            # Weiße Fläche am unteren Rand hinzufügen
             white_stripe_height = 50
             new_frame = np.vstack([frame, np.ones((white_stripe_height, width, 3), dtype=np.uint8) * 255])
 
@@ -625,13 +652,15 @@ class GesichtserkennungApp:
             # OpenCV-Fenster anzeigen
             cv2.imshow('Webcam', new_frame)
 
-            # Fenstergröße anpassen
+            # Fenstergröße berechnen
             window_width = new_frame.shape[1]
             window_height = new_frame.shape[0]
 
-            # Fenster zentrieren
+            # Fensterposition berechnen (zentriert)
             pos_x = (screen_width - window_width) // 2
             pos_y = (screen_height - window_height) // 2
+
+            # Fenster zentrieren
             cv2.moveWindow('Webcam', pos_x, pos_y)
 
             # Fenster immer im Vordergrund halten
