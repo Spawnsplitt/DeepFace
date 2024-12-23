@@ -321,6 +321,7 @@ class GesichtserkennungApp:
 
                     elif current_value == 5:
                         print("Funktion 5 erkannt: Beenden")
+                        self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_function_name, 0)
                         self.beenden()
                         
                         break  # Schleife beenden, wenn Funktion 4 gesetzt ist
@@ -452,11 +453,14 @@ class GesichtserkennungApp:
             self.set_registry_value(winreg.HKEY_CURRENT_USER, registry_path, registry_status, "Fehlgeschlagen")
             return
 
-        # Bildschirmdimensionen abrufen
-        root = tk.Tk()
-        screen_width = root.winfo_screenwidth()
-        screen_height = root.winfo_screenheight()
-        root.destroy()
+        # Vollbildfenster erstellen
+        cv2.namedWindow('Webcam', cv2.WND_PROP_FULLSCREEN)
+        cv2.setWindowProperty('Webcam', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+
+        # Fenster immer im Vordergrund halten und den Desktop sperren
+        hwnd = ctypes.windll.user32.FindWindowW(None, "Webcam")
+        if hwnd:
+            ctypes.windll.user32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0040)  # HWND_TOPMOST (-1)
 
         while True:
             ret, frame = self.video_capture.read()
@@ -466,7 +470,7 @@ class GesichtserkennungApp:
             # Bildhöhe und Breite
             height, width, channels = frame.shape
 
-            # Weise Fläche am unteren Rand hinzufügen
+            # Weiße Leiste für Anweisungen hinzufügen
             white_stripe_height = 50
             new_frame = np.vstack([frame, np.ones((white_stripe_height, width, 3), dtype=np.uint8) * 255])
 
@@ -477,26 +481,7 @@ class GesichtserkennungApp:
             # OpenCV-Bild anzeigen
             cv2.imshow('Webcam', new_frame)
 
-            # Fenstergröße anpassen
-            window_width = new_frame.shape[1]
-            window_height = new_frame.shape[0]
-
-            # Fenster zentrieren
-            pos_x = (screen_width - window_width) // 2
-            pos_y = (screen_height - window_height) // 2
-            cv2.moveWindow('Webcam', pos_x, pos_y)
-
-            # Fenster immer im Vordergrund halten
-            hwnd = ctypes.windll.user32.FindWindowW(None, "Webcam")  # Fenster mit Namen "Webcam" suchen
-            if hwnd:
-                ctypes.windll.user32.SetWindowPos(hwnd, -1, pos_x, pos_y, 0, 0, 0x0001 | 0x0040)  # HWND_TOPMOST (-1) setzen
-
-            # Registry-Wert abfragen
-            current_value = self.get_registry_value(registry_path, registry_value_name)
-            if current_value == 4:
-                self.abbruch()
-
-            # Tastatureingaben verarbeiten
+            # Eingaben abfangen
             key = cv2.waitKey(1) & 0xFF
             if key == 13:  # Enter-Taste
                 self.vergleiche_gesicht_mit_pinecone(frame)
@@ -505,11 +490,15 @@ class GesichtserkennungApp:
                 self.abbruch()
                 break
 
+            # Registry-Wert abfragen
+            current_value = self.get_registry_value(registry_path, registry_value_name)
+            if current_value == 4:
+                self.abbruch()
+                break
+
         self.video_capture.release()
         cv2.destroyAllWindows()
-
-        self.master.iconify()
-        
+            
 
     def lade_alle_kundenbilder(self):
         index = pc.Index("face-recognition-index")
