@@ -2,6 +2,7 @@
 Version: 1.0.0
 Date: 2024-12-18
 Description: Dieses Skript führt eine Gesichtserkennung durch.
+Author: Kevin Rupertus
 """
 
 
@@ -13,12 +14,10 @@ import dlib
 import numpy as np 
 from pinecone import Pinecone, ServerlessSpec
 import tkinter as tk
-from tkinter import font, messagebox
+from tkinter import font
 import winreg
 import warnings
-import shutil
 import ctypes
-
 import sys
 import time
 import threading
@@ -117,7 +116,7 @@ class GesichtserkennungApp:
         registry_path = r"SOFTWARE\Tanoffice\facescan"
         registry_status = "Zwischenstatus"
         registry_function_name = "ErgebnisText"
-        registry_function_value = "Funktion"
+
 
         self.master = master
         master.title("Gesichtserkennung")
@@ -160,6 +159,7 @@ class GesichtserkennungApp:
         self.deleted_customer_button.pack(padx=5, pady=5)
         
         self.quit_button = tk.Button(master, text="Beenden", command=self.beenden)
+    
         self.quit_button.pack(padx=5, pady=5)
         
         self.video_capture = None
@@ -649,9 +649,6 @@ class GesichtserkennungApp:
             cv2.putText(new_frame, "<Esc> Beenden                             <Enter> Speichern", (20, height + 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv2.LINE_AA)
 
-            # OpenCV-Fenster anzeigen
-            cv2.imshow('Webcam', new_frame)
-
             # Fenstergröße berechnen
             window_width = new_frame.shape[1]
             window_height = new_frame.shape[0]
@@ -663,10 +660,14 @@ class GesichtserkennungApp:
             # Fenster zentrieren
             cv2.moveWindow('Webcam', pos_x, pos_y)
 
-            # Fenster immer im Vordergrund halten
+            # Fenster immer im Vordergrund halten und unverschiebbar machen
             hwnd = ctypes.windll.user32.FindWindowW(None, "Webcam")  # Fenster mit Namen "Webcam" suchen
             if hwnd:
                 ctypes.windll.user32.SetWindowPos(hwnd, -1, pos_x, pos_y, 0, 0, 0x0001 | 0x0040)  # HWND_TOPMOST (-1) setzen
+                ctypes.windll.user32.SetWindowLongW(hwnd, -16, ctypes.windll.user32.GetWindowLongW(hwnd, -16) & ~0x00040000)  # Unverschiebbar
+
+            # OpenCV-Fenster anzeigen
+            cv2.imshow('Webcam', new_frame)
 
             # Registry-Wert abfragen
             current_value = self.get_registry_value(registry_path, registry_value_name)
