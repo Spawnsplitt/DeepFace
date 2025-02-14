@@ -317,8 +317,8 @@ class GesichtserkennungApp:
         """Setzt den Wert von 'IsRunning' auf False, wenn die Anwendung geschlossen wird."""
         try:
             self.set_registry_value(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, REGISTRY_SET_FUNCTION, 5)
-            self.set_registry_value(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, "IsRunning", 0)
-            self.set_registry_value_sz(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, "ErgebnisText", "Programm wurde beendet")
+            self.set_registry_value(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, REGISTRY_LIFE_STATUS, 0)
+            self.set_registry_value_sz(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, REGISTRY_FUNCTION_RESULT_TEXT, "Programm wurde beendet")
             self.set_registry_value(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, REGISTRY_SET_FUNCTION, 0)
         except Exception as e:
             print(f"Fehler beim Setzen des Registry-Werts bei Beenden: {e}")
