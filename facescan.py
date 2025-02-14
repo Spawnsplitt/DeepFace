@@ -20,7 +20,7 @@ REGISTRY_PATH = r"SOFTWARE\Tanoffice\facescan"
 REGISTRY_SET_FUNCTION = "Funktion"
 REGISTRY_FUNCTION_RESULT = "Ergebnis"
 REGISTRY_FUNCTION_RESULT_TEXT = "ErgebnisText"
-REGISTRY_STATUS = "Status"
+REGISTRY_STATUS = "Zwischenstatus"
 REGISTRY_LIFE_STATUS = "IsRunning"
 REGISTRY_KNOWN_CUSTOMER = "ErkannterKunde"
 
@@ -354,10 +354,10 @@ class GesichtserkennungApp:
     def schreibe_registry(self, erkannter_kunde, ergebnis, ergebnis_text, zwischenstatus):
         try:
             with winreg.CreateKey(winreg.HKEY_CURRENT_USER, REGISTRY_PATH) as key:
-                winreg.SetValueEx(key, "ErkannterKunde", 0, winreg.REG_SZ, erkannter_kunde)
-                winreg.SetValueEx(key, "Ergebnis", 0, winreg.REG_SZ, ergebnis)
-                winreg.SetValueEx(key, "ErgebnisText", 0, winreg.REG_SZ, ergebnis_text)
-                winreg.SetValueEx(key, "Zwischenstatus", 0, winreg.REG_SZ, zwischenstatus)
+                winreg.SetValueEx(key, REGISTRY_KNOWN_CUSTOMER, 0, winreg.REG_SZ, erkannter_kunde)
+                winreg.SetValueEx(key, REGISTRY_FUNCTION_RESULT, 0, winreg.REG_SZ, ergebnis)
+                winreg.SetValueEx(key, REGISTRY_FUNCTION_RESULT_TEXT, 0, winreg.REG_SZ, ergebnis_text)
+                winreg.SetValueEx(key, REGISTRY_STATUS, 0, winreg.REG_SZ, zwischenstatus)
             print(f"Erkannter Kunde in die Registry geschrieben: {erkannter_kunde}")
         except Exception as e:
             print(f"Fehler beim Schreiben in die Registry: {e}")
