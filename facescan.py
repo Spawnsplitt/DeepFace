@@ -23,40 +23,41 @@ REGISTRY_FUNCTION_RESULT_TEXT = "ErgebnisText"
 REGISTRY_STATUS = "Zwischenstatus"
 REGISTRY_LIFE_STATUS = "IsRunning"
 REGISTRY_KNOWN_CUSTOMER = "ErkannterKunde"
+REGISTRY_SCORE = "Score"
+REGISTRY_PICTURE = "FotoPfad"
 
 
 class RegistryHandler:
-    def set_registry_value_global(self, key_path, value_name, Value):
+    #Funktion zum Schreiben und Lesen von Registrierungswerten
+    def registry_access(self, action, path, name=None, value=None, reg_type=None):
         try:
-            # Öffne den Registry-Schlüssel (oder erstelle ihn, falls er nicht existiert)
-            registry_key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_WRITE)
-            # Setze den Wert
-            winreg.SetValueEx(registry_key, value_name, 0, winreg.REG_SZ, Value)
-            # Schlüssel schließen
-            winreg.CloseKey(registry_key)
-            return Value
-        
-        except Exception as e:
-            print(f"Fehler beim Schreiben in die Registry-verfummelt: {e}")
-            return None
+            if action == "set":
+                # Schlüssel erstellen oder öffnen
+                key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, path)
+                
+                if isinstance(value, dict):  # Mehrere Werte setzen
+                    for k, v in value.items():
+                        v_type = winreg.REG_DWORD if isinstance(v, int) else winreg.REG_SZ
+                        winreg.SetValueEx(key, k, 0, v_type, v)
+                else:  # Einzelnen Wert setzen
+                    reg_type = reg_type or (winreg.REG_DWORD if isinstance(value, int) else winreg.REG_SZ)
+                    winreg.SetValueEx(key, name, 0, reg_type, value)
 
-    def get_registry_value(self, key_path, value_name):
-        try:
-            # Öffne den Schlüssel im Lesezugriff
-            registry_key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_READ)
-            
-            # Lese den Wert des angegebenen Wertes
-            value, regtype = winreg.QueryValueEx(registry_key, value_name)
-            print(f"Registry value: {value}")
-            
-            # Schließe den Schlüssel
-            winreg.CloseKey(registry_key)
-            
-            return value
+                winreg.CloseKey(key)
+                return True
+
+            elif action == "get":
+                # Schlüssel öffnen
+                key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, path, 0, winreg.KEY_READ)
+                reg_value, _ = winreg.QueryValueEx(key, name)
+                winreg.CloseKey(key)
+                return reg_value
+
         except FileNotFoundError:
+            print(f"Registry-Pfad '{path}' oder Wert '{name}' nicht gefunden.")
             return None
         except Exception as e:
-            print(f"Fehler beim Lesen der Registry: {e}")
+            print(f"Registry-Fehler: {e}")
             return None
         
     
@@ -68,13 +69,13 @@ registry_handler = RegistryHandler()
 
 
 # Registry-Wert abrufen
-registry_handler.set_registry_value_global(REGISTRY_PATH, REGISTRY_FUNCTION_RESULT_TEXT, "Fehler: Problem mit API-Schlüssel")
+registry_handler.registry_access("set", REGISTRY_PATH, REGISTRY_FUNCTION_RESULT_TEXT, "Fehler: Problem mit API-Schlüssel", winreg.REG_SZ)
 #print(f"schreibe Registry 1 : {result}")
-result = registry_handler.set_registry_value_global(REGISTRY_PATH, REGISTRY_FUNCTION_RESULT, "1")
+result = registry_handler.registry_access("get", REGISTRY_PATH, REGISTRY_FUNCTION_RESULT, "1", winreg.REG_SZ)
 print(f"schreibe Registry 2 : {result}") 
 
 
-key = registry_handler.get_registry_value(REGISTRY_PATH, "API_KEY")
+key = registry_handler.registry_access("get", REGISTRY_PATH, "API_KEY", winreg.REG_SZ)
 
 
 
@@ -99,8 +100,8 @@ if 'face-recognition-index' not in pc.list_indexes().names():
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-registry_handler.set_registry_value_global(REGISTRY_PATH, REGISTRY_FUNCTION_RESULT_TEXT, "API-KEY Korrekt")
-registry_handler.set_registry_value_global(REGISTRY_PATH, REGISTRY_FUNCTION_RESULT, "0")
+registry_handler.registry_access("set", REGISTRY_PATH, REGISTRY_FUNCTION_RESULT_TEXT, "API-KEY Korrekt", winreg.REG_SZ)
+registry_handler.registry_access("set", REGISTRY_PATH, REGISTRY_FUNCTION_RESULT, "0", winreg.REG_SZ)
 
 
 
@@ -116,7 +117,7 @@ class GesichtserkennungApp:
         custom_font = font.Font(family="Arial", size=12)
 
         if not self.check_webcam():
-            self.set_registry_value_sz(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, REGISTRY_FUNCTION_RESULT_TEXT, "Webcam nicht gefunden")
+            self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_FUNCTION_RESULT, value="Webcam nicht gefunden", value_type=winreg.REG_SZ)
             print("Webcam nicht gefunden. Das Programm wird beendet.")
             sys.exit(1)
 
@@ -128,8 +129,8 @@ class GesichtserkennungApp:
             self.dlib_face_recognition_model = dlib.face_recognition_model_v1("dlib_face_recognition_resnet_model_v1.dat")
             self.dlib_shape_predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
         except Exception as e:
-            self.set_registry_value(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, REGISTRY_FUNCTION_RESULT_TEXT, f"Fehler beim Laden der Dlib-Modelle: {e}")
-            self.set_registry_value(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, REGISTRY_STATUS, "Fertig")
+            self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_FUNCTION_RESULT, value=f"Fehler beim Laden der Dlib-Modelle: {e}", value_type=winreg.REG_SZ)
+            self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_STATUS, value="Fertig", value_type=winreg.REG_SZ)
             sys.exit(1)
 
         self.label = tk.Label(master, text="Willkommen zur Gesichtserkennung!", font=custom_font)
@@ -149,7 +150,7 @@ class GesichtserkennungApp:
         self.quit_button.pack(padx=5, pady=5)
         
         self.video_capture = None
-        self.deepface_ordner = self.lese_registry_wert(r"SOFTWARE\Tanoffice\facescan", "FotoPfad")
+        self.deepface_ordner = self.registry_action("get", path=REGISTRY_PATH, name=REGISTRY_PICTURE)
         self.frame = None  # Zum Speichern des letzten Frames
         
         self.running_thread = None  # Thread für die Aktualisierung des Registry-Werts
@@ -166,7 +167,7 @@ class GesichtserkennungApp:
         cap = cv2.VideoCapture(0)
 
         if not cap.isOpened():
-            self.set_registry_value_sz(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, REGISTRY_FUNCTION_RESULT_TEXT, "Webcam nicht gefunden")
+            self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_FUNCTION_RESULT_TEXT, value="Webcam nicht gefunden", value_type=winreg.REG_SZ)
             print("Fehler", "Webcam nicht gefunden")
             return False
 
@@ -179,7 +180,7 @@ class GesichtserkennungApp:
     def check_webcam_still_alive(self):
         cap = cv2.VideoCapture(0)
         if not cap.isOpened():
-            self.set_registry_value_sz(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, REGISTRY_FUNCTION_RESULT_TEXT, "Webcam wurde getrennt")
+            self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_FUNCTION_RESULT_TEXT, value="Webcam wurde getrennt", value_type=winreg.REG_SZ)
             print("Webcam wurde getrennt.")
             return False
         cap.release()
@@ -194,17 +195,6 @@ class GesichtserkennungApp:
                 return
             time.sleep(2)
 
-    def set_registry_value_sz(self, root, path, name, value):
-        try:
-            # Öffne den Registry-Schlüssel (oder erstelle ihn, falls er nicht existiert)
-            key = winreg.CreateKey(root, path)
-            # Setze den Wert
-            winreg.SetValueEx(key, name, 0, winreg.REG_SZ, value)
-            # Schlüssel schließen
-            winreg.CloseKey(key)
-        except Exception as e:
-            print(f"Fehler beim Schreiben in die Registry (verfummelt): {e}")
-
 
     # Funktion zum Minimieren des Fensters
     def minimize_window():
@@ -215,36 +205,40 @@ class GesichtserkennungApp:
     if hasattr(sys, 'frozen'):
         minimize_window()
 
-    def set_registry_value(self, root, path, name, value):
-        try:
-            # Öffne den Registry-Schlüssel (oder erstelle ihn, falls er nicht existiert)
-            key = winreg.CreateKey(root, path)
-            # Setze den Wert
-            winreg.SetValueEx(key, name, 0, winreg.REG_DWORD, value)
-            # Schlüssel schließen
-            winreg.CloseKey(key)
-        except Exception as e:
-            print(f"Fehler beim Schreiben in die Registry (verfummelt): {e}")
 
-    def get_registry_value(self, key_path, value_name):
-            try:
-                # Öffne den Schlüssel im Lesezugriff
-                registry_key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_READ)
-                
-                # Lese den Wert des angegebenen Wertes
-                value, regtype = winreg.QueryValueEx(registry_key, value_name)
-                print(f"Registry value: {value}")
-                
-                # Schließe den Schlüssel
-                winreg.CloseKey(registry_key)
-                
-                return value
-            except FileNotFoundError:
-                print(f"Registry key or value not found: {key_path}\\{value_name}")
-                return None
-            except Exception as e:
-                print(f"Error reading registry: {e}")
-                return None
+    def registry_action(self, action, root=winreg.HKEY_CURRENT_USER, path="", name=REGISTRY_KNOWN_CUSTOMER, value=None, value_type=None):
+        try:
+            if action == "set":
+                if value_type is None:
+                    raise ValueError("value_type muss angegeben werden für 'set'")
+                with winreg.CreateKey(root, path) as key:
+                    winreg.SetValueEx(key, name, 0, value_type, value)
+
+            elif action == "get":
+                try:
+                    with winreg.OpenKey(root, path) as key:
+                        result, _ = winreg.QueryValueEx(key, name)
+                        return result
+                except FileNotFoundError:
+                    print(f"Registry-Pfad oder Wert nicht gefunden: {path}\\{name} in Zeile {sys.exc_info()[2].tb_lineno} (Pfad: {path}, Name: {name})")
+                    return None
+                except Exception as e:
+                    print(f"Fehler bei Registry-Operation 'get': {e} in Zeile {sys.exc_info()[2].tb_lineno} (Pfad: {path}, Name: {name})")
+                    return None
+
+            elif action == "set_multiple":
+                if not isinstance(value, dict):
+                    raise ValueError("Für 'set_multiple' muss 'value' ein Dictionary sein.")
+                with winreg.CreateKey(root, path) as key:
+                    for key_name, (val, v_type) in value.items():
+                        winreg.SetValueEx(key, key_name, 0, v_type, val)
+
+            else:
+                raise ValueError("Ungültige Aktion. Verwende 'set', 'get' oder 'set_multiple'.")
+
+        except Exception as e:
+            print(f"Allgemeiner Fehler bei Registry-Operation '{action}': {e} in Zeile {sys.exc_info()[2].tb_lineno} (Pfad: {path}, Name: {name})")
+            return None
 
 
     
@@ -263,38 +257,40 @@ class GesichtserkennungApp:
         """
         try:
             # Setzt den Registry-Wert 'IsRunning' auf 1, um anzuzeigen, dass das Programm läuft
-            self.set_registry_value(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, REGISTRY_LIFE_STATUS, 1)
+
+            self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_LIFE_STATUS, value=1, value_type=winreg.REG_DWORD)
             print("Registry-Wert 'IsRunning' gesetzt")
 
             while True:
                 try:
                     # Liest den aktuellen Wert des 'Funktion'-Eintrags aus der Registry
-                    current_value = self.get_registry_value(REGISTRY_PATH, REGISTRY_SET_FUNCTION)
+                    #current_value = self.get_registry_value(REGISTRY_PATH, REGISTRY_SET_FUNCTION)
+                    current_value = self.registry_action("get", path=REGISTRY_PATH, name=REGISTRY_SET_FUNCTION)
 
                     if current_value == 1:
                         print("Funktion 1 erkannt: zeige_webcam_fuer_upruefung")
                         self.zeige_webcam_fuer_upruefung()
-                        self.set_registry_value(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, REGISTRY_SET_FUNCTION, 0)
+                        self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_SET_FUNCTION, value=0, value_type=winreg.REG_DWORD)
 
                     elif current_value == 2:
                         print("Funktion 2 erkannt: zeige_webcam_fuer_neues_kundenbild")
                         self.zeige_webcam_fuer_neues_kundenbild()
-                        self.set_registry_value(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, REGISTRY_SET_FUNCTION, 0)
+                        self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_SET_FUNCTION, value=0, value_type=winreg.REG_DWORD)
 
                     elif current_value == 3:
                         print("Funktion 3 erkannt: loesche_kundendaten")
                         self.loesche_kundendaten()
-                        self.set_registry_value(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, REGISTRY_SET_FUNCTION, 0)
+                        self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_SET_FUNCTION, value=0, value_type=winreg.REG_DWORD)
 
                     elif current_value == 4:
                         print("Funktion 4 erkannt: Abbruch")
                         self.abbruch()
-                        self.set_registry_value(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, REGISTRY_SET_FUNCTION, 0)
+                        self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_SET_FUNCTION, value=0, value_type=winreg.REG_DWORD)
                         break  # Schleife beenden, wenn Funktion 4 gesetzt ist
 
                     elif current_value == 5:
                         print("Funktion 5 erkannt: Beenden")
-                        self.set_registry_value(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, REGISTRY_SET_FUNCTION, 0)
+                        self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_SET_FUNCTION, value=0, value_type=winreg.REG_DWORD)
                         self.beenden()
                         
                         break  # Schleife beenden, wenn Funktion 4 gesetzt ist
@@ -316,10 +312,10 @@ class GesichtserkennungApp:
     def beenden(self):
         """Setzt den Wert von 'IsRunning' auf False, wenn die Anwendung geschlossen wird."""
         try:
-            self.set_registry_value(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, REGISTRY_SET_FUNCTION, 5)
-            self.set_registry_value(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, REGISTRY_LIFE_STATUS, 0)
-            self.set_registry_value_sz(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, REGISTRY_FUNCTION_RESULT_TEXT, "Programm wurde beendet")
-            self.set_registry_value(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, REGISTRY_SET_FUNCTION, 0)
+            self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_SET_FUNCTION, value=5, value_type=winreg.REG_DWORD)
+            self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_LIFE_STATUS, value=0, value_type=winreg.REG_DWORD)
+            self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_FUNCTION_RESULT_TEXT, value="Programm wurde beendet", value_type=winreg.REG_SZ)
+            self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_SET_FUNCTION, value=0, value_type=winreg.REG_DWORD)
         except Exception as e:
             print(f"Fehler beim Setzen des Registry-Werts bei Beenden: {e}")
         self.master.quit()  # Beendet das Tkinter-Fenster
@@ -329,10 +325,10 @@ class GesichtserkennungApp:
     def abbruch(self):
         """Setzt den Wert von 'Funktion' auf 4 und schließt nur das OpenCV-Fenster."""
         try:
-            result = self.get_registry_value(REGISTRY_PATH, REGISTRY_SET_FUNCTION)
-            self.set_registry_value(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, REGISTRY_SET_FUNCTION, 4)
-            self.set_registry_value(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, REGISTRY_SET_FUNCTION, 0)
-            self.set_registry_value_sz(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, REGISTRY_FUNCTION_RESULT_TEXT, f"Funktion {result} wurde abgebrochen")
+            result = self.registry_action("get", path=REGISTRY_PATH, name=REGISTRY_SET_FUNCTION)
+            self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_SET_FUNCTION, value=4, value_type=winreg.REG_DWORD)
+            self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_SET_FUNCTION, value=0, value_type=winreg.REG_DWORD)
+            self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_FUNCTION_RESULT_TEXT, value=f"Funktion {result} wurde abgebrochen", value_type=winreg.REG_SZ)
         except Exception as e:
             print(f"Fehler beim Setzen des Registry-Werts beim Abbrechen: {e}")
 
@@ -340,32 +336,10 @@ class GesichtserkennungApp:
         cv2.destroyWindow('Webcam') 
 
 
-   
-
-    def lese_registry_wert(self, REGISTRY_PATH, value_name):
-        try:
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, REGISTRY_PATH) as key:
-                wert, _ = winreg.QueryValueEx(key, value_name)
-                return wert
-        except FileNotFoundError:
-            print(f"Der Registry-Pfad '{REGISTRY_PATH}' oder der Wert '{value_name}' wurde nicht gefunden.")
-            return None
-
-    def schreibe_registry(self, erkannter_kunde, ergebnis, ergebnis_text, zwischenstatus):
-        try:
-            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, REGISTRY_PATH) as key:
-                winreg.SetValueEx(key, REGISTRY_KNOWN_CUSTOMER, 0, winreg.REG_SZ, erkannter_kunde)
-                winreg.SetValueEx(key, REGISTRY_FUNCTION_RESULT, 0, winreg.REG_SZ, ergebnis)
-                winreg.SetValueEx(key, REGISTRY_FUNCTION_RESULT_TEXT, 0, winreg.REG_SZ, ergebnis_text)
-                winreg.SetValueEx(key, REGISTRY_STATUS, 0, winreg.REG_SZ, zwischenstatus)
-            print(f"Erkannter Kunde in die Registry geschrieben: {erkannter_kunde}")
-        except Exception as e:
-            print(f"Fehler beim Schreiben in die Registry: {e}")
-            
 
     # Funktion zum Löschen von Kundendaten
     def loesche_kundendaten(self):
-        name = self.lese_registry_wert(REGISTRY_PATH, REGISTRY_KNOWN_CUSTOMER)
+        name = self.registry_action("get", path=REGISTRY_PATH, name=REGISTRY_KNOWN_CUSTOMER)
 
         # Benutzer nach dem Kundennamen fragen
         if not name:
@@ -377,19 +351,20 @@ class GesichtserkennungApp:
             os.remove(bild_pfad)
             print(f"Bild '{name}.jpg' wurde gelöscht.")
         else:
-            self.set_registry_value(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, REGISTRY_FUNCTION_RESULT_TEXT, f"Bild für '{name}' wurde nicht gefunden.")
-            self.set_registry_value(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, REGISTRY_STATUS, "Fertig")
+            self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_FUNCTION_RESULT_TEXT, value=f"Bild für '{name}' wurde nicht gefunden.", value_type=winreg.REG_SZ)
+            self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_STATUS, value="Fertig", value_type=winreg.REG_SZ)
 
         # Vektor in Pinecone löschen
         try:
             index = pc.Index("face-recognition-index")
             index.delete(ids=[name])
             print(f"Vektor für {name} erfolgreich aus Pinecone entfernt.")
-            self.set_registry_value(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, REGISTRY_FUNCTION_RESULT_TEXT, f"Kundendaten für '{name}' wurden erfolgreich gelöscht.")
-            self.set_registry_value(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, REGISTRY_STATUS, "Fertig")
+            self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_FUNCTION_RESULT_TEXT, value=f"Kundendaten für '{name}' wurden erfolgreich gelöscht.", value_type=winreg.REG_SZ)
+            self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_STATUS, value="Fertig", value_type=winreg.REG_SZ)
         except Exception as e:
-            self.set_registry_value(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, REGISTRY_FUNCTION_RESULT_TEXT, f"Fehler beim Löschen des Vektors in Pinecone: {e}")
-            self.set_registry_value(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, REGISTRY_STATUS, "Fehlgeschlagen")
+            self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_FUNCTION_RESULT_TEXT, value=f"Fehler beim Löschen des Vektors in Pinecone: {e}", value_type=winreg.REG_SZ)
+            self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_STATUS, value="Fehlgeschlagen", value_type=winreg.REG_SZ)
+
             
             
 
@@ -398,15 +373,15 @@ class GesichtserkennungApp:
 
     def zeige_webcam_fuer_upruefung(self):
         # Registry-Wert setzen
-        self.set_registry_value(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, REGISTRY_SET_FUNCTION, 1)
+        self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_SET_FUNCTION, value=1, value_type=winreg.REG_DWORD)
 
         time.sleep(0.5)
 
         """Funktion zum Starten der Webcam für die Nutzerüberprüfung."""
         self.video_capture = cv2.VideoCapture(0, cv2.CAP_DSHOW)
         if not self.video_capture.isOpened():
-            self.set_registry_value(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, REGISTRY_FUNCTION_RESULT_TEXT, "Webcam konnte nicht geöffnet werden")
-            self.set_registry_value(winreg.HKEY_CURRENT_USER, REGISTRY_PATH, REGISTRY_STATUS, "Fehlgeschlagen")
+            self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_FUNCTION_RESULT_TEXT, value="Webcam konnte nicht geöffnet werden", value_type=winreg.REG_SZ)
+            self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_STATUS, value="Fehlgeschlagen", value_type=winreg.REG_SZ)
             return
 
         # Bildschirmauflösung abrufen
@@ -475,7 +450,8 @@ class GesichtserkennungApp:
                 break
 
             # Registry-Wert abfragen
-            current_value = self.get_registry_value(REGISTRY_PATH, REGISTRY_SET_FUNCTION)
+
+            current_value = self.registry_action("get", path=REGISTRY_PATH, name=REGISTRY_SET_FUNCTION)
             if current_value == 4:
                 self.abbruch()
                 break
@@ -533,34 +509,82 @@ class GesichtserkennungApp:
     
 
     def vergleiche_gesicht_mit_pinecone(self, frame):
+        try:
+            # Wert aus der Registry lesen
+            str_Uebereinstimmung = self.registry_action("get", path=REGISTRY_PATH, name=REGISTRY_SCORE)
 
-        registry_function = "Score"
+            # Falls der Wert nicht existiert oder fehlerhaft ist, Standardwert setzen
+            try:
+                Uebereinstimmung = float(str_Uebereinstimmung) if str_Uebereinstimmung is not None else 0.9
+            except ValueError:
+                print(f"Fehler: REGISTRY_SCORE enthält keinen gültigen Wert ({str_Uebereinstimmung}). Standardwert 0.9 wird genutzt.")
+                Uebereinstimmung = 0.9
 
-        str_Uebereinstimmung = self.get_registry_value(REGISTRY_PATH, registry_function)
-        Uebereinstimmung= float(str_Uebereinstimmung)
+            # Pinecone-Index initialisieren
+            try:
+                index = pc.Index("face-recognition-index")
+            except Exception as e:
+                print(f"Fehler beim Initialisieren des Pinecone-Index: {e}")
+                self.registry_action("set_multiple", path=REGISTRY_PATH, value={
+                    REGISTRY_KNOWN_CUSTOMER: ("Fehler", winreg.REG_SZ),
+                    REGISTRY_FUNCTION_RESULT: ("1", winreg.REG_SZ),
+                    REGISTRY_FUNCTION_RESULT_TEXT: ("Pinecone-Index konnte nicht geladen werden",  winreg.REG_SZ),
+                    REGISTRY_STATUS: ("Fertig", winreg.REG_SZ)
+                })
+                return
 
-        index = pc.Index("face-recognition-index")
+            # Gesichtsembedding berechnen
+            embedding = self.berechne_embedding(frame)
+            if embedding is None:
+                self.registry_action("set_multiple", path=REGISTRY_PATH, value={
+                    REGISTRY_KNOWN_CUSTOMER: ("Fehler", winreg.REG_SZ),
+                    REGISTRY_FUNCTION_RESULT: ("1", winreg.REG_SZ),
+                    REGISTRY_FUNCTION_RESULT_TEXT: ("Kein Gesicht erkannt", winreg.REG_SZ),
+                    REGISTRY_STATUS: ("Fertig", winreg.REG_SZ)
+                })
+                return
 
-        embedding = self.berechne_embedding(frame)
-        if embedding is not None:
             # Pinecone-Abfrage
             result = index.query(vector=embedding.tolist(), top_k=1, include_values=True, approximate=True)
+
             if result["matches"]:
                 best_match = result["matches"][0]
                 erkannter_kunde = best_match["id"]
                 score = best_match["score"]
 
-                print(score)
+                print(f"Gefundene Übereinstimmung: {erkannter_kunde}, Score: {score:.2f}")
 
-                # Überprüfung auf 100 % Übereinstimmung
-                if score >= Uebereinstimmung:  # Score für perfekte Übereinstimmung
-                    self.schreibe_registry(erkannter_kunde, "0", f"Kunde erkannt mit perfekter Übereinstimmung", "Fertig")
+                # Vergleich mit der minimalen Übereinstimmung aus der Registry
+                if score >= Uebereinstimmung:
+                    self.registry_action("set_multiple", path=REGISTRY_PATH, value={
+                        REGISTRY_KNOWN_CUSTOMER: (erkannter_kunde, winreg.REG_SZ) ,
+                        REGISTRY_FUNCTION_RESULT: ("0", winreg.REG_SZ),
+                        REGISTRY_FUNCTION_RESULT_TEXT: ("Kunde erkannt mit hoher Übereinstimmung", winreg.REG_SZ),
+                        REGISTRY_STATUS: ("Fertig", winreg.REG_SZ)
+                    })
                 else:
-                    self.schreibe_registry("Fehler", "1", f"Keine perfekte Übereinstimmung. Score: {score:.2f}", "Fertig")
+                    self.registry_action("set_multiple", path=REGISTRY_PATH, value={
+                        REGISTRY_KNOWN_CUSTOMER: ("Fehler", winreg.REG_SZ),
+                        REGISTRY_FUNCTION_RESULT: ("1", winreg.REG_SZ),
+                        REGISTRY_FUNCTION_RESULT_TEXT: (f"Keine perfekte Übereinstimmung. Score: {score:.2f}", winreg.REG_SZ),
+                        REGISTRY_STATUS: ("Fertig", winreg.REG_SZ)
+                    })
             else:
-                self.schreibe_registry("Fehler", "1", "Kein Kunde erkannt", "Fertig")
-        else:
-            self.schreibe_registry("Fehler", "1", "Kein Gesicht erkannt", "Fertig")
+                self.registry_action("set_multiple", path=REGISTRY_PATH, value={
+                    REGISTRY_KNOWN_CUSTOMER: ("Fehler", winreg.REG_SZ),
+                    REGISTRY_FUNCTION_RESULT: ("1", winreg.REG_SZ),
+                    REGISTRY_FUNCTION_RESULT_TEXT: ("Kein Kunde erkannt", winreg.REG_SZ),
+                    REGISTRY_STATUS: ("Fertig", winreg.REG_SZ)
+                })
+
+        except Exception as e:
+            print(f"Unerwarteter Fehler in vergleiche_gesicht_mit_pinecone: {e}")
+            self.registry_action("set_multiple", path=REGISTRY_PATH, value={
+                REGISTRY_KNOWN_CUSTOMER: ("Fehler", winreg.REG_SZ),
+                REGISTRY_FUNCTION_RESULT: ("1", winreg.REG_SZ),
+                REGISTRY_FUNCTION_RESULT_TEXT: (f"Fehler: {str(e)}", winreg.REG_SZ),
+                REGISTRY_STATUS: ("Fertig", winreg.REG_SZ)
+            })
             
 
     def vergleiche_gesicht_mit_alle_kundenbilder(self, frame):
@@ -569,7 +593,12 @@ class GesichtserkennungApp:
             print(f"Vergleiche mit {len(bilder)} Kundenbildern")
             self.vergleiche_gesicht_mit_pinecone(frame)
         else:
-            self.schreibe_registry("Fehler", "1", "Keine Kundenbilder gefunden.", "Fertig")
+            self.registry_action("set_multiple", path=REGISTRY_PATH, value={
+                REGISTRY_KNOWN_CUSTOMER: ("Fehler", winreg.REG_SZ) ,
+                REGISTRY_FUNCTION_RESULT: ("1", winreg.REG_SZ),
+                REGISTRY_FUNCTION_RESULT_TEXT: ("Keine Kundenbilder gefunden", winreg.REG_SZ),
+                REGISTRY_STATUS: ("Fertig", winreg.REG_SZ)
+            })
             
     
 
@@ -577,7 +606,12 @@ class GesichtserkennungApp:
         # Webcam öffnen
         self.video_capture = cv2.VideoCapture(0, cv2.CAP_DSHOW)
         if not self.video_capture.isOpened():
-            self.schreibe_registry("Fehler", "1", "Kamera konnte nicht geöffnet werden.", "Fertig")
+            self.registry_action("set_multiple", path=REGISTRY_PATH, value={
+                REGISTRY_KNOWN_CUSTOMER: ("Fehler", winreg.REG_SZ),
+                REGISTRY_FUNCTION_RESULT: ("1", winreg.REG_SZ),
+                REGISTRY_FUNCTION_RESULT_TEXT: ("Kamera konnte nicht geöffnet werden", winreg.REG_SZ),
+                REGISTRY_STATUS: ("Fertig", winreg.REG_SZ)
+            })
             return
 
         # Bildschirmdimensionen abrufen
@@ -626,7 +660,7 @@ class GesichtserkennungApp:
             cv2.imshow('Webcam', new_frame)
 
             # Registry-Wert abfragen
-            current_value = self.get_registry_value(REGISTRY_PATH, REGISTRY_SET_FUNCTION)
+            current_value = self.registry_action("get", path=REGISTRY_PATH, value=REGISTRY_SET_FUNCTION)
             if current_value == 4:
                 self.abbruch()
                 break
@@ -634,7 +668,7 @@ class GesichtserkennungApp:
             # Tastatureingaben verarbeiten
             key = cv2.waitKey(1) & 0xFF
             if key == 13:  # Enter-Taste
-                self.speichere_kundenbild(frame)  # Bild speichern
+                self.speichere_neues_kundenbild(frame)  # Bild speichern
                 break
             elif key == 27:  # Escape-Taste
                 self.abbruch()
@@ -647,7 +681,7 @@ class GesichtserkennungApp:
 
     def speichere_neues_kundenbild(self, frame):
             # Holen des Kundennamens aus der Registry
-            name = self.get_registry_value(REGISTRY_PATH, REGISTRY_KNOWN_CUSTOMER)
+            name = self.registry_action("get", path=REGISTRY_PATH, value=REGISTRY_KNOWN_CUSTOMER)
             if not name:
                 print("Kein erkannter Kunde in der Registry.")
                 return
@@ -667,9 +701,20 @@ class GesichtserkennungApp:
         if embedding is not None:
             index.upsert([(name, embedding.tolist())])
             print(f"Vektor für {name} erfolgreich in Pinecone gespeichert.")
-            self.schreibe_registry(name, "0", f"Kundenbild für '{name}' erfolgreich gespeichert.", "Fertig")
+            self.registry_action("set_multiple", path=REGISTRY_PATH, value={
+                REGISTRY_KNOWN_CUSTOMER: (name, winreg.REG_SZ),
+                REGISTRY_FUNCTION_RESULT: ("0", winreg.REG_SZ),
+                REGISTRY_FUNCTION_RESULT_TEXT: (f"Kundenbild für '{name}' erfolgreich gespeichert.", winreg.REG_SZ),
+                REGISTRY_STATUS: ("Fertig", winreg.REG_SZ)
+
+            })
         else:
-            self.schreibe_registry(name, "1", f"Fehler beim Berechnen des Embeddings für '{name}'", "Fehlgeschlagen")
+            self.registry_action("set_multiple", path=REGISTRY_PATH, value={
+                REGISTRY_KNOWN_CUSTOMER: (name, winreg.REG_SZ),
+                REGISTRY_FUNCTION_RESULT: ("1", winreg.REG_SZ),
+                REGISTRY_FUNCTION_RESULT_TEXT: (f"Fehler beim Berechnen des Embeddings für '{name}'", winreg.REG_SZ),
+                REGISTRY_STATUS: ("Fertig", winreg.REG_SZ)
+                })
             
 
 # Tkinter Hauptprogramm starten
