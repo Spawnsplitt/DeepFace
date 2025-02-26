@@ -77,6 +77,9 @@ print(f"schreibe Registry 2 : {result}")
 
 key = registry_handler.registry_access("get", REGISTRY_PATH, "API_KEY", winreg.REG_SZ)
 
+database_name = registry_handler.registry_access("get", REGISTRY_PATH, "DatenbankName", winreg.REG_SZ)
+
+
 
 
         # Pinecone initialisieren
@@ -85,11 +88,11 @@ pc = Pinecone(
         )
 
 
-      
+   
 
-if 'face-recognition-index' not in pc.list_indexes().names():
+if database_name not in pc.list_indexes().names():
             pc.create_index(
-                name='face-recognition-index',
+                name=database_name,
                 dimension=1536,  # Setze die Dimension entsprechend den Embeddings
                 metric='euclidean',
                 spec=ServerlessSpec(
@@ -356,7 +359,7 @@ class GesichtserkennungApp:
 
         # Vektor in Pinecone löschen
         try:
-            index = pc.Index("face-recognition-index")
+            index = pc.Index(database_name)
             index.delete(ids=[name])
             print(f"Vektor für {name} erfolgreich aus Pinecone entfernt.")
             self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_FUNCTION_RESULT_TEXT, value=f"Kundendaten für '{name}' wurden erfolgreich gelöscht.", value_type=winreg.REG_SZ)
@@ -461,7 +464,7 @@ class GesichtserkennungApp:
             
 
     def lade_alle_kundenbilder(self):
-        index = pc.Index("face-recognition-index")
+        index = pc.Index(database_name)
 
         bilder = []
         with ThreadPoolExecutor() as executor:
@@ -522,7 +525,7 @@ class GesichtserkennungApp:
 
             # Pinecone-Index initialisieren
             try:
-                index = pc.Index("face-recognition-index")
+                index = pc.Index(database_name)
             except Exception as e:
                 print(f"Fehler beim Initialisieren des Pinecone-Index: {e}")
                 self.registry_action("set_multiple", path=REGISTRY_PATH, value={
@@ -696,7 +699,7 @@ class GesichtserkennungApp:
 
 
     def index_kundenbild_in_pinecone(self, name, frame):
-        index = pc.Index("face-recognition-index")
+        index = pc.Index(database_name)
         embedding = self.berechne_embedding(frame)
         if embedding is not None:
             index.upsert([(name, embedding.tolist())])
