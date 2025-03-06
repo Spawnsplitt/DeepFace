@@ -25,6 +25,7 @@ REGISTRY_LIFE_STATUS = "IsRunning"
 REGISTRY_KNOWN_CUSTOMER = "ErkannterKunde"
 REGISTRY_SCORE = "Score"
 REGISTRY_PICTURE = "FotoPfad"
+REGISTRY_AKTUELLER_KUNDE = "AktuellerKunde"
 
 
 class RegistryHandler:
@@ -342,27 +343,18 @@ class GesichtserkennungApp:
 
     # Funktion zum Löschen von Kundendaten
     def loesche_kundendaten(self):
-        name = self.registry_action("get", path=REGISTRY_PATH, name=REGISTRY_KNOWN_CUSTOMER)
+        nameLoeschKunde = self.registry_action("get", path=REGISTRY_PATH, name=REGISTRY_AKTUELLER_KUNDE)
 
         # Benutzer nach dem Kundennamen fragen
-        if not name:
+        if not nameLoeschKunde:
             return
-
-        # Bilddatei löschen
-        bild_pfad = os.path.join(self.deepface_ordner, f"{name}.jpg")
-        if os.path.exists(bild_pfad):
-            os.remove(bild_pfad)
-            print(f"Bild '{name}.jpg' wurde gelöscht.")
-        else:
-            self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_FUNCTION_RESULT_TEXT, value=f"Bild für '{name}' wurde nicht gefunden.", value_type=winreg.REG_SZ)
-            self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_STATUS, value="Fertig", value_type=winreg.REG_SZ)
 
         # Vektor in Pinecone löschen
         try:
             index = pc.Index(database_name)
-            index.delete(ids=[name])
-            print(f"Vektor für {name} erfolgreich aus Pinecone entfernt.")
-            self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_FUNCTION_RESULT_TEXT, value=f"Kundendaten für '{name}' wurden erfolgreich gelöscht.", value_type=winreg.REG_SZ)
+            index.delete(ids=[nameLoeschKunde])
+            print(f"Vektor für {nameLoeschKunde} erfolgreich aus Pinecone entfernt.")
+            self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_FUNCTION_RESULT_TEXT, value=f"Kundendaten für '{nameLoeschKunde}' wurden erfolgreich gelöscht.", value_type=winreg.REG_SZ)
             self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_STATUS, value="Fertig", value_type=winreg.REG_SZ)
         except Exception as e:
             self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_FUNCTION_RESULT_TEXT, value=f"Fehler beim Löschen des Vektors in Pinecone: {e}", value_type=winreg.REG_SZ)
