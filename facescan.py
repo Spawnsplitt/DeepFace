@@ -181,25 +181,6 @@ class GesichtserkennungApp:
             return True
 
 
-    def check_webcam_still_alive(self):
-        cap = cv2.VideoCapture(0)
-        if not cap.isOpened():
-            self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_FUNCTION_RESULT_TEXT, value="Webcam wurde getrennt", value_type=winreg.REG_SZ)
-            print("Webcam wurde getrennt.")
-            return False
-        cap.release()
-        return True
-
-        
-    def monitor_webcam(self):
-        while self.running_thread:  # Überprüfe ein Flag statt einer Endlosschleife
-            if not self.check_webcam_still_alive():
-                print("Webcam wurde getrennt. Programm wird beendet.")
-                self.beenden()
-                return
-            time.sleep(2)
-
-
     # Funktion zum Minimieren des Fensters
     def minimize_window():
         hwnd = win32gui.GetForegroundWindow()
@@ -209,7 +190,7 @@ class GesichtserkennungApp:
     if hasattr(sys, 'frozen'):
         minimize_window()
 
-
+    #Funktion zum schreiben und lesen in der Windows Registry innerhalb des Main-Programm
     def registry_action(self, action, root=winreg.HKEY_CURRENT_USER, path="", name=REGISTRY_KNOWN_CUSTOMER, value=None, value_type=None):
         try:
             if action == "set":
@@ -312,7 +293,7 @@ class GesichtserkennungApp:
 
 
 
-
+    #Funktion zum beenden der gesamten Anwendung
     def beenden(self):
         """Setzt den Wert von 'IsRunning' auf False, wenn die Anwendung geschlossen wird."""
         try:
@@ -325,7 +306,7 @@ class GesichtserkennungApp:
         self.master.quit()  # Beendet das Tkinter-Fenster
 
 
-
+    #Funktion zum abbrechen innerhalb einer Funktion
     def abbruch(self):
         """Setzt den Wert von 'Funktion' auf 4 und schließt nur das OpenCV-Fenster."""
         try:
@@ -365,7 +346,7 @@ class GesichtserkennungApp:
 
         self.master.iconify()
 
-
+    #Webcamfenster anzeigen lassen für Überprüfung
     def zeige_webcam_fuer_upruefung(self):
         # Registry-Wert setzen
         self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_SET_FUNCTION, value=1, value_type=winreg.REG_DWORD)
@@ -438,8 +419,10 @@ class GesichtserkennungApp:
             # Eingaben abfangen
             key = cv2.waitKey(1) & 0xFF
             if key == 13:  # Enter-Taste
+                #Starte vergleich mit der Datenbank
                 self.vergleiche_gesicht_mit_pinecone(frame)
                 break
+            #Beenden des Webcamfensters
             elif key == 27:  # Escape-Taste
                 self.abbruch()
                 break
@@ -454,55 +437,71 @@ class GesichtserkennungApp:
         self.video_capture.release()
         cv2.destroyAllWindows()
             
-
+    #Funktion um alle Kundenbilder aus dem Deepface_Kunden Ordner zu laden
     def lade_alle_kundenbilder(self):
-        index = pc.Index(database_name)
 
-        bilder = []
-        with ThreadPoolExecutor() as executor:
-            futures = []
-            for datei in os.listdir(self.deepface_ordner):
-                if datei.lower().endswith(('.jpg', '.jpeg', '.png')):
-                    pfad = os.path.join(self.deepface_ordner, datei)
-                    futures.append(executor.submit(self.prozessiere_kundenbild, pfad, index))
-            
-            for future in as_completed(futures):
-                pfad, embedding = future.result()
-                if embedding is not None:
-                    bilder.append(pfad)
         
-        return bilder
+        index = pc.Index(database_name)  # Pinecone-Index initialisieren
+        bilder = []
+        #Funktion um Embedings aus Bildern zu berechnen und dann in Pinecone zu laden
+        def prozessiere_kundenbild(pfad):
+            #Versuche Bild zu laden
+            try:
+                bild = cv2.imread(pfad)
+                if bild is None:
+                    print(f"Konnte Bild nicht laden: {pfad}")
+                    return None, None
 
-    def prozessiere_kundenbild(self, pfad, index):
-        try:
-            bild = cv2.imread(pfad)
-            if bild is not None:
                 print(f"Lade Bild: {pfad}")
-                # Berechne Embedding
+
+                # Embedding berechnen
                 embedding = self.berechne_embedding(bild)
                 if embedding is not None:
                     vector_id = os.path.splitext(os.path.basename(pfad))[0]
                     index.upsert([(vector_id, embedding)])
                     print(f"Vektor für {vector_id} erfolgreich in Pinecone gespeichert.")
-                return pfad, embedding
-        except Exception as e:
-            print(f"Fehler beim Verarbeiten des Bildes {pfad}: {e}")
-            return pfad, None
+                    return pfad, embedding
+            except Exception as e:
+                print(f"Fehler beim Verarbeiten des Bildes {pfad}: {e}")
+            
+            return None, None  # Falls ein Fehler auftritt oder kein Gesicht erkannt wird
 
-    def berechne_embedding(self, bild):
-        det = self.dlib_face_detector(bild, 1)
-        if len(det) > 0:
-            shape = self.dlib_shape_predictor(bild, det[0])
-            embedding = np.array(self.dlib_face_recognition_model.compute_face_descriptor(bild, shape))
-            if embedding.size == 128:
-                embedding = np.resize(embedding, (1536,))
-            return embedding
-        else:
-            print(f"Kein Gesicht erkannt im Bild.")
-            return None
+        # Parallele Verarbeitung mit ThreadPoolExecutor
+        with ThreadPoolExecutor() as executor:
+            futures = {
+                executor.submit(prozessiere_kundenbild, os.path.join(self.deepface_ordner, datei)): datei
+                for datei in os.listdir(self.deepface_ordner)
+                if datei.lower().endswith(('.jpg', '.jpeg', '.png'))  # Nur Bilddateien verarbeiten
+            }
 
+            for future in as_completed(futures):
+                pfad, embedding = future.result()
+                if embedding is not None:
+                    bilder.append(pfad)
+
+        return bilder  # Rückgabe der erfolgreich verarbeiteten Bilder
     
+    def berechne_embedding(self, bild):
+            """
+            Berechnet das Gesichtsembedding für ein gegebenes Bild.
+            """
+            det = self.dlib_face_detector(bild, 1)  # Gesichtserkennung im Bild durchführen
+            if len(det) > 0:  # Falls mindestens ein Gesicht erkannt wurde
+                shape = self.dlib_shape_predictor(bild, det[0])  # Gesichtsmerkmale extrahieren
+                
+                # Gesichtsembedding mit dlib berechnen
+                embedding = np.array(self.dlib_face_recognition_model.compute_face_descriptor(bild, shape))
+                
+                # Falls das Embedding genau 128 Werte hat, auf 1536 skalieren (Größenanpassung)
+                if embedding.size == 128:
+                    embedding = np.resize(embedding, (1536,))
+                
+                return embedding  # Das berechnete Embedding zurückgeben
+            else:
+                print(f"Kein Gesicht erkannt im Bild.")  # Falls kein Gesicht erkannt wurde
+                return None  # `None` zurückgeben
 
+    #Funktion zum Vergleichen mit der Pineconedatenbank
     def vergleiche_gesicht_mit_pinecone(self, frame):
         try:
             # Wert aus der Registry lesen
@@ -581,7 +580,7 @@ class GesichtserkennungApp:
                 REGISTRY_STATUS: ("Fertig", winreg.REG_SZ)
             })
             
-
+    #Vergleich mit den Bildern im DEEPFACE_KUNDEN Ordner
     def vergleiche_gesicht_mit_alle_kundenbilder(self, frame):
         bilder = self.lade_alle_kundenbilder()
         if bilder:
@@ -689,7 +688,7 @@ class GesichtserkennungApp:
             # Optional: Indexieren des Kundenbildes in Pinecone, falls gewünscht
             self.index_kundenbild_in_pinecone(name, frame)
 
-
+    #Funktion zum Erstellen eines neuen Index für neue Kundenfotos
     def index_kundenbild_in_pinecone(self, name, frame):
         index = pc.Index(database_name)
         embedding = self.berechne_embedding(frame)
