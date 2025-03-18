@@ -120,6 +120,7 @@ class GesichtserkennungApp:
         
         custom_font = font.Font(family="Arial", size=12)
 
+        #Überprüfung ob Webcam vorhanden ist
         if not self.check_webcam():
             self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_FUNCTION_RESULT, value="Webcam nicht gefunden", value_type=winreg.REG_SZ)
             print("Webcam nicht gefunden. Das Programm wird beendet.")
@@ -127,7 +128,7 @@ class GesichtserkennungApp:
 
         
 
-        # Dlib-Modelle laden
+        # Dlib-Modelle (KI-Modelle) laden
         try:
             self.dlib_face_detector = dlib.get_frontal_face_detector()
             self.dlib_face_recognition_model = dlib.face_recognition_model_v1("dlib_face_recognition_resnet_model_v1.dat")
@@ -597,7 +598,6 @@ class GesichtserkennungApp:
     
 
     def zeige_webcam_fuer_neues_kundenbild(self):
-        # Webcam öffnen
         self.video_capture = cv2.VideoCapture(0, cv2.CAP_DSHOW)
         if not self.video_capture.isOpened():
             self.registry_action("set_multiple", path=REGISTRY_PATH, value={
@@ -610,47 +610,51 @@ class GesichtserkennungApp:
 
         # Bildschirmdimensionen abrufen
         user32 = ctypes.windll.user32
-        screen_width = user32.GetSystemMetrics(0)  # Breite des Bildschirms
-        screen_height = user32.GetSystemMetrics(1)  # Höhe des Bildschirms
+        screen_width = user32.GetSystemMetrics(0)
+        screen_height = user32.GetSystemMetrics(1)
 
         # OpenCV-Fenster erstellen
         cv2.namedWindow('Webcam', cv2.WINDOW_NORMAL)
-        cv2.setWindowProperty('Webcam', cv2.WND_PROP_TOPMOST, 1)  # Fenster immer im Vordergrund halten
+        cv2.setWindowProperty('Webcam', cv2.WND_PROP_TOPMOST, 1)
+
+        # Trackbars für Helligkeit & Weichzeichnen (anstelle von Rauschunterdrückung)
+        def update(_):
+            pass
+
+        cv2.createTrackbar("Helligkeit", "Webcam", 10, 30, update)  # Faktor 1.0 - 3.0
+        cv2.createTrackbar("Weichzeichnen", "Webcam", 0, 10, update)  # 0 = Kein Blur, 10 = Max
 
         while True:
             ret, frame = self.video_capture.read()
             if not ret:
                 break
 
-            # Bildhöhe und Breite abrufen
-            height, width, channels = frame.shape
+            # Werte aus Trackbars holen
+            helligkeit = cv2.getTrackbarPos("Helligkeit", "Webcam") / 10.0  # Faktor 1.0 - 3.0
+            blur_level = cv2.getTrackbarPos("Weichzeichnen", "Webcam") * 2 + 1  # Immer ungerade Werte für Blur
 
-            # Weiße Fläche am unteren Rand hinzufügen
+            # Helligkeit anpassen
+            frame = cv2.convertScaleAbs(frame, alpha=helligkeit, beta=0)
+
+            # Weichzeichnen für Live-Vorschau
+            if blur_level > 1:
+                frame = cv2.GaussianBlur(frame, (blur_level, blur_level), 0)
+
+            # UI-Bereich unten hinzufügen
+            height, width, _ = frame.shape
             white_stripe_height = 50
             new_frame = np.vstack([frame, np.ones((white_stripe_height, width, 3), dtype=np.uint8) * 255])
 
-            # Anzeige der Anweisungen auf der weißen Fläche
-            cv2.putText(new_frame, "<Esc> Beenden                             <Enter> Speichern", (20, height + 30),
+            # Anweisungen anzeigen
+            cv2.putText(new_frame, "<Esc> Beenden     <Enter> Speichern", (20, height + 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv2.LINE_AA)
 
-            # Fenstergröße berechnen
-            window_width = new_frame.shape[1]
-            window_height = new_frame.shape[0]
-
-            # Fensterposition berechnen (zentriert)
-            pos_x = (screen_width - window_width) // 2
-            pos_y = (screen_height - window_height) // 2
-
             # Fenster zentrieren
+            pos_x = (screen_width - width) // 2
+            pos_y = (screen_height - (height + white_stripe_height)) // 2
             cv2.moveWindow('Webcam', pos_x, pos_y)
 
-            # Fenster immer im Vordergrund halten und unverschiebbar machen
-            hwnd = ctypes.windll.user32.FindWindowW(None, "Webcam")  # Fenster mit Namen "Webcam" suchen
-            if hwnd:
-                ctypes.windll.user32.SetWindowPos(hwnd, -1, pos_x, pos_y, 0, 0, 0x0001 | 0x0040)  # HWND_TOPMOST (-1) setzen
-                ctypes.windll.user32.SetWindowLongW(hwnd, -16, ctypes.windll.user32.GetWindowLongW(hwnd, -16) & ~0x00040000)  # Unverschiebbar
-
-            # OpenCV-Fenster anzeigen
+            # Bild anzeigen
             cv2.imshow('Webcam', new_frame)
 
             # Registry-Wert abfragen
@@ -659,10 +663,12 @@ class GesichtserkennungApp:
                 self.abbruch()
                 break
 
-            # Tastatureingaben verarbeiten
+            # Tastenaktionen
             key = cv2.waitKey(1) & 0xFF
             if key == 13:  # Enter-Taste
-                self.speichere_neues_kundenbild(frame)  # Bild speichern
+                # Beim Speichern echte Rauschunterdrückung anwenden (nur hier!)
+                frame = cv2.fastNlMeansDenoisingColored(frame, None, 10, 10, 7, 21)
+                self.speichere_neues_kundenbild(frame)
                 break
             elif key == 27:  # Escape-Taste
                 self.abbruch()
@@ -709,6 +715,8 @@ class GesichtserkennungApp:
                 REGISTRY_FUNCTION_RESULT_TEXT: (f"Fehler beim Berechnen des Embeddings für '{name}'", winreg.REG_SZ),
                 REGISTRY_STATUS: ("Fertig", winreg.REG_SZ)
                 })
+
+    
             
 
 # Tkinter Hauptprogramm starten
