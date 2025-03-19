@@ -90,7 +90,7 @@ pc = Pinecone(
 
 
    
-
+#Einbinden der Datenbank
 if database_name not in pc.list_indexes().names():
             pc.create_index(
                 name=database_name,
@@ -167,15 +167,15 @@ class GesichtserkennungApp:
 
     
 
-
+    #Funktion zum Überprüfen ob Webcam vorhanden ist
     def check_webcam(self):
         cap = cv2.VideoCapture(0)
-
+    #Webcam nicht gefunden
         if not cap.isOpened():
             self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_FUNCTION_RESULT_TEXT, value="Webcam nicht gefunden", value_type=winreg.REG_SZ)
             print("Fehler", "Webcam nicht gefunden")
             return False
-
+    #Webcam gefunden
         else:
             print("Webcam gefunden")
             cap.release()
@@ -292,7 +292,7 @@ class GesichtserkennungApp:
             print(f"Fehler beim Setzen des Registry-Werts: {outer_exception}")
             time.sleep(1)
 
-
+    
 
     #Funktion zum beenden der gesamten Anwendung
     def beenden(self):
@@ -325,7 +325,10 @@ class GesichtserkennungApp:
 
     # Funktion zum Löschen von Kundendaten
     def loesche_kundendaten(self):
-        nameLoeschKunde = self.registry_action("get", path=REGISTRY_PATH, name=REGISTRY_AKTUELLER_KUNDE)
+        if self.registry_action("get", path=REGISTRY_PATH, name=REGISTRY_AKTUELLER_KUNDE) == "":
+            nameLoeschKunde = self.registry_action("get", path=REGISTRY_PATH, name=REGISTRY_KNOWN_CUSTOMER)
+        else:
+            nameLoeschKunde = self.registry_action("get", path=REGISTRY_PATH, name=REGISTRY_AKTUELLER_KUNDE)
 
         # Benutzer nach dem Kundennamen fragen
         if not nameLoeschKunde:
