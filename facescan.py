@@ -369,6 +369,9 @@ class GesichtserkennungApp:
         screen_width = user32.GetSystemMetrics(0)  # Bildschirmbreite
         screen_height = user32.GetSystemMetrics(1)  # Bildschirmhöhe
 
+        # Dlib Gesichtserkennungsmodell initialisieren
+        detector = dlib.get_frontal_face_detector()
+
         # OpenCV-Fenster vorbereiten
         cv2.namedWindow('Webcam', cv2.WINDOW_NORMAL)
         cv2.setWindowProperty('Webcam', cv2.WND_PROP_TOPMOST, 1)  # Fenster bleibt im Vordergrund
@@ -384,7 +387,6 @@ class GesichtserkennungApp:
                 print("Webcam-Fehler: Kein Bild abrufbar!")
                 return
 
-
             # Überprüfe, ob das Bild leer ist
             if frame is None or frame.size == 0:
                 print("Das aufgerufene Bild ist leer!")  # Debugging-Ausgabe
@@ -392,6 +394,17 @@ class GesichtserkennungApp:
 
             # Bildhöhe und Breite abrufen
             height, width, _ = frame.shape
+
+            # Gesichtserkennung mit Dlib
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            faces = detector(gray)  # Gesichter in Bild erkennen
+
+            print(f"Anzahl der erkannten Gesichter: {len(faces)}")  # Debugging-Ausgabe: Anzahl der erkannten Gesichter
+
+            # Rechtecke um die erkannten Gesichter zeichnen
+            for face in faces:
+                x, y, w, h = (face.left(), face.top(), face.width(), face.height())
+                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)  # Rechteck um Gesicht zeichnen
 
             # Weiße Leiste am unteren Rand hinzufügen
             white_stripe_height = 50
@@ -423,16 +436,15 @@ class GesichtserkennungApp:
             # Eingaben abfangen
             key = cv2.waitKey(1) & 0xFF
             if key == 13:  # Enter-Taste
-                #Starte vergleich mit der Datenbank
+                # Starte Vergleich mit der Datenbank
                 self.vergleiche_gesicht_mit_pinecone(frame)
                 break
-            #Beenden des Webcamfensters
+            # Beenden des Webcamfensters
             elif key == 27:  # Escape-Taste
                 self.abbruch()
                 break
 
             # Registry-Wert abfragen
-
             current_value = self.registry_action("get", path=REGISTRY_PATH, name=REGISTRY_SET_FUNCTION)
             if current_value == 4:
                 self.abbruch()
@@ -601,6 +613,7 @@ class GesichtserkennungApp:
     
 
     def zeige_webcam_fuer_neues_kundenbild(self):
+        # Kamera öffnen
         self.video_capture = cv2.VideoCapture(0, cv2.CAP_DSHOW)
         if not self.video_capture.isOpened():
             self.registry_action("set_multiple", path=REGISTRY_PATH, value={
@@ -615,6 +628,9 @@ class GesichtserkennungApp:
         user32 = ctypes.windll.user32
         screen_width = user32.GetSystemMetrics(0)
         screen_height = user32.GetSystemMetrics(1)
+
+        # dlib Gesichtserkennungs-Modell (HOG-Detektor) initialisieren
+        detector = dlib.get_frontal_face_detector()
 
         # OpenCV-Fenster erstellen
         cv2.namedWindow('Webcam', cv2.WINDOW_NORMAL)
@@ -642,6 +658,16 @@ class GesichtserkennungApp:
             # Weichzeichnen für Live-Vorschau
             if blur_level > 1:
                 frame = cv2.GaussianBlur(frame, (blur_level, blur_level), 0)
+
+            # Gesichter erkennen (dlib)
+            gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            faces = detector(gray_frame)
+
+            # Jedes erkannte Gesicht umranden
+            for face in faces:
+                # Rechteckkoordinaten
+                x1, y1, x2, y2 = (face.left(), face.top(), face.right(), face.bottom())
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)  # Grün für die Umrandung
 
             # UI-Bereich unten hinzufügen
             height, width, _ = frame.shape
