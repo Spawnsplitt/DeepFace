@@ -166,6 +166,7 @@ class GesichtserkennungApp:
         self.start_registry_thread()
 
     
+    
 
     #Funktion zum Überprüfen ob Webcam vorhanden ist
     def check_webcam(self):
@@ -745,7 +746,9 @@ class GesichtserkennungApp:
                 REGISTRY_STATUS: ("Fertig", winreg.REG_SZ)
                 })
 
-    
+
+
+
             
 
 # Tkinter Hauptprogramm starten
