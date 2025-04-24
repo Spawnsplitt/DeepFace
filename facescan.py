@@ -14,6 +14,7 @@ import time
 import threading
 import win32gui
 import win32con
+from datetime import datetime
 
 
 REGISTRY_PATH = r"SOFTWARE\Tanoffice\facescan"
@@ -124,6 +125,7 @@ class GesichtserkennungApp:
         if not self.check_webcam():
             self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_FUNCTION_RESULT, value="Webcam nicht gefunden", value_type=winreg.REG_SZ)
             print("Webcam nicht gefunden. Das Programm wird beendet.")
+            self.log("[FEHLER] Webcam nicht gefunden")
             sys.exit(1)
 
         
@@ -165,20 +167,27 @@ class GesichtserkennungApp:
         # Starten des Hintergrund-Threads für die Registry-Aktualisierung
         self.start_registry_thread()
 
-    
+    def log(self, message):
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        with open("facescan.log", "a") as log_file:
+            log_file.write(f"{timestamp} - {message}\n")
     
 
     #Funktion zum Überprüfen ob Webcam vorhanden ist
     def check_webcam(self):
         cap = cv2.VideoCapture(0)
+        self.log("[INFO] Facescan gestartet")
     #Webcam nicht gefunden
         if not cap.isOpened():
             self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_FUNCTION_RESULT_TEXT, value="Webcam nicht gefunden", value_type=winreg.REG_SZ)
             print("Fehler", "Webcam nicht gefunden")
+            self.log("[FEHLER] Webcam nicht gefunden")
             return False
     #Webcam gefunden
         else:
             print("Webcam gefunden")
+            self.log("[INFO] Webcam gefunden")
             cap.release()
             return True
 
@@ -256,27 +265,32 @@ class GesichtserkennungApp:
 
                     if current_value == 1:
                         print("Funktion 1 erkannt: zeige_webcam_fuer_upruefung")
+                        self.log("[INFO] Funktion 1 erkannt: zeige_webcam_fuer_upruefung")
                         self.zeige_webcam_fuer_upruefung()
                         self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_SET_FUNCTION, value=0, value_type=winreg.REG_DWORD)
 
                     elif current_value == 2:
                         print("Funktion 2 erkannt: zeige_webcam_fuer_neues_kundenbild")
+                        self.log("[INFO] Funktion 2 erkannt: zeige_webcam_fuer_neues_kundenbild")
                         self.zeige_webcam_fuer_neues_kundenbild()
                         self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_SET_FUNCTION, value=0, value_type=winreg.REG_DWORD)
 
                     elif current_value == 3:
                         print("Funktion 3 erkannt: loesche_kundendaten")
+                        self.log("[INFO] Funktion 3 erkannt: loesche_kundendaten")
                         self.loesche_kundendaten()
                         self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_SET_FUNCTION, value=0, value_type=winreg.REG_DWORD)
 
                     elif current_value == 4:
                         print("Funktion 4 erkannt: Abbruch")
+                        self.log("[INFO] Funktion 4 erkannt: Abbruch")
                         self.abbruch()
                         self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_SET_FUNCTION, value=0, value_type=winreg.REG_DWORD)
                         break  # Schleife beenden, wenn Funktion 4 gesetzt ist
 
                     elif current_value == 5:
                         print("Funktion 5 erkannt: Beenden")
+                        self.log("[INFO] Funktion 5 erkannt: Beenden")
                         self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_SET_FUNCTION, value=0, value_type=winreg.REG_DWORD)
                         self.beenden()
                         
@@ -287,10 +301,12 @@ class GesichtserkennungApp:
 
                 except Exception as inner_exception:
                     print(f"Fehler beim Auslesen der Registry: {inner_exception}")
+                    self.log(f"[ERROR] Fehler beim Auslesen der Registry: {inner_exception}")
                     time.sleep(1)
 
         except Exception as outer_exception:
             print(f"Fehler beim Setzen des Registry-Werts: {outer_exception}")
+            self.log(f"[ERROR] Fehler beim Setzen des Registry-Werts: {outer_exception}")
             time.sleep(1)
 
     
@@ -305,6 +321,7 @@ class GesichtserkennungApp:
             self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_SET_FUNCTION, value=0, value_type=winreg.REG_DWORD)
         except Exception as e:
             print(f"Fehler beim Setzen des Registry-Werts bei Beenden: {e}")
+            self.log(f"[ERROR] Fehler beim Setzen des Registry-Werts bei Beenden: {e}")
         self.master.quit()  # Beendet das Tkinter-Fenster
 
 
@@ -318,6 +335,7 @@ class GesichtserkennungApp:
             self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_FUNCTION_RESULT_TEXT, value=f"Funktion {result} wurde abgebrochen", value_type=winreg.REG_SZ)
         except Exception as e:
             print(f"Fehler beim Setzen des Registry-Werts beim Abbrechen: {e}")
+            self.log(f"[ERROR] Fehler beim Setzen des Registry-Werts beim Abbrechen: {e}")
 
         # Schließt nur das OpenCV-Fenster mit dem Namen 'Webcam'
         cv2.destroyWindow('Webcam') 
@@ -340,6 +358,7 @@ class GesichtserkennungApp:
             index = pc.Index(database_name)
             index.delete(ids=[nameLoeschKunde])
             print(f"Vektor für {nameLoeschKunde} erfolgreich aus Pinecone entfernt.")
+            self.log(f"[INFO] Vektor für {nameLoeschKunde} erfolgreich aus Pinecone entfernt.")
             self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_FUNCTION_RESULT_TEXT, value=f"Kundendaten für '{nameLoeschKunde}' wurden erfolgreich gelöscht.", value_type=winreg.REG_SZ)
             self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_STATUS, value="Fertig", value_type=winreg.REG_SZ)
         except Exception as e:
@@ -362,6 +381,7 @@ class GesichtserkennungApp:
         self.video_capture = cv2.VideoCapture(0, cv2.CAP_DSHOW)
         if not self.video_capture.isOpened():
             self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_FUNCTION_RESULT_TEXT, value="Webcam konnte nicht geöffnet werden", value_type=winreg.REG_SZ)
+            self.log(f"[ERROR] Webcam konnte nicht geöffnet werden")
             self.registry_action("set", path=REGISTRY_PATH, name=REGISTRY_STATUS, value="Fehlgeschlagen", value_type=winreg.REG_SZ)
             return
 
@@ -383,14 +403,17 @@ class GesichtserkennungApp:
                 if ret and frame is not None and frame.size > 0:
                     break
                 print(f"Versuch {i+1}: Kein gültiges Bild erhalten...")
+                self.log(f"[ERROR] Kein gültiges Bild erhalten...")
                 time.sleep(0.1)  # 100ms warten
             if not ret or frame is None or frame.size == 0:
                 print("Webcam-Fehler: Kein Bild abrufbar!")
+                self.log("[ERROR] Webcam-Fehler: Kein Bild abrufbar!")
                 return
 
             # Überprüfe, ob das Bild leer ist
             if frame is None or frame.size == 0:
                 print("Das aufgerufene Bild ist leer!")  # Debugging-Ausgabe
+                self.log("[ERROR] Das aufgerufene Bild ist leer!")
                 break
 
             # Bildhöhe und Breite abrufen
@@ -401,6 +424,7 @@ class GesichtserkennungApp:
             faces = detector(gray)  # Gesichter in Bild erkennen
 
             print(f"Anzahl der erkannten Gesichter: {len(faces)}")  # Debugging-Ausgabe: Anzahl der erkannten Gesichter
+            self.log(f"[INFO] Anzahl der erkannten Gesichter: {len(faces)}")
 
             # Rechtecke um die erkannten Gesichter zeichnen
             for face in faces:
@@ -467,6 +491,7 @@ class GesichtserkennungApp:
                 bild = cv2.imread(pfad)
                 if bild is None:
                     print(f"Konnte Bild nicht laden: {pfad}")
+                    self.log(f"[ERROR] Konnte Bild nicht laden: {pfad}")
                     return None, None
 
                 print(f"Lade Bild: {pfad}")
@@ -477,9 +502,11 @@ class GesichtserkennungApp:
                     vector_id = os.path.splitext(os.path.basename(pfad))[0]
                     index.upsert([(vector_id, embedding)])
                     print(f"Vektor für {vector_id} erfolgreich in Pinecone gespeichert.")
+                    self.log(f"[INFO] Vektor für {vector_id} erfolgreich in Pinecone gespeichert.")
                     return pfad, embedding
             except Exception as e:
                 print(f"Fehler beim Verarbeiten des Bildes {pfad}: {e}")
+                self.log(f"[ERROR] Fehler beim Verarbeiten des Bildes {pfad}: {e}")
             
             return None, None  # Falls ein Fehler auftritt oder kein Gesicht erkannt wird
 
@@ -516,6 +543,7 @@ class GesichtserkennungApp:
                 return embedding  # Das berechnete Embedding zurückgeben
             else:
                 print(f"Kein Gesicht erkannt im Bild.")  # Falls kein Gesicht erkannt wurde
+                self.log(f"[ERROR] Kein Gesicht erkannt im Bild.")
                 return None  # `None` zurückgeben
 
     #Funktion zum Vergleichen mit der Pineconedatenbank
@@ -529,6 +557,7 @@ class GesichtserkennungApp:
                 Uebereinstimmung = float(str_Uebereinstimmung) if str_Uebereinstimmung is not None else 0.9
             except ValueError:
                 print(f"Fehler: REGISTRY_SCORE enthält keinen gültigen Wert ({str_Uebereinstimmung}). Standardwert 0.9 wird genutzt.")
+                self.log(f"[ERROR] REGISTRY_SCORE enthält keinen gültigen Wert ({str_Uebereinstimmung}). Standardwert 0.9 wird genutzt.")
                 Uebereinstimmung = 0.9
 
             # Pinecone-Index initialisieren
@@ -536,6 +565,7 @@ class GesichtserkennungApp:
                 index = pc.Index(database_name)
             except Exception as e:
                 print(f"Fehler beim Initialisieren des Pinecone-Index: {e}")
+                self.log(f"[ERROR] Fehler beim Initialisieren des Pinecone-Index: {e}")
                 self.registry_action("set_multiple", path=REGISTRY_PATH, value={
                     REGISTRY_KNOWN_CUSTOMER: ("Fehler", winreg.REG_SZ),
                     REGISTRY_FUNCTION_RESULT: ("1", winreg.REG_SZ),
@@ -564,6 +594,7 @@ class GesichtserkennungApp:
                 score = best_match["score"]
 
                 print(f"Gefundene Übereinstimmung: {erkannter_kunde}, Score: {score:.2f}")
+                self.log(f"Gefundene Übereinstimmung: {erkannter_kunde}, Score: {score:.2f}")
 
                 # Vergleich mit der minimalen Übereinstimmung aus der Registry
                 if score >= Uebereinstimmung:
@@ -602,6 +633,7 @@ class GesichtserkennungApp:
         bilder = self.lade_alle_kundenbilder()
         if bilder:
             print(f"Vergleiche mit {len(bilder)} Kundenbildern")
+            self.log(f"Vergleiche mit {len(bilder)} Kundenbildern")
             self.vergleiche_gesicht_mit_pinecone(frame)
         else:
             self.registry_action("set_multiple", path=REGISTRY_PATH, value={
@@ -714,12 +746,14 @@ class GesichtserkennungApp:
             name = self.registry_action("get", path=REGISTRY_PATH, value=REGISTRY_KNOWN_CUSTOMER)
             if not name:
                 print("Kein erkannter Kunde in der Registry.")
+                self.log("[ERROR] Kein erkannter Kunde in der Registry.")
                 return
 
             # Speichern des Kundenbildes
             dateiname = os.path.join(self.deepface_ordner, f"{name}.jpg")
             cv2.imwrite(dateiname, frame)
             print(f"Kundenbild für {name} wurde erfolgreich gespeichert.")
+            self.log(f"Kundenbild für {name} wurde erfolgreich gespeichert.")
             
             # Optional: Indexieren des Kundenbildes in Pinecone, falls gewünscht
             self.index_kundenbild_in_pinecone(name, frame)
@@ -731,6 +765,7 @@ class GesichtserkennungApp:
         if embedding is not None:
             index.upsert([(name, embedding.tolist())])
             print(f"Vektor für {name} erfolgreich in Pinecone gespeichert.")
+            self.log(f"Vektor für {name} erfolgreich in Pinecone gespeichert.")
             self.registry_action("set_multiple", path=REGISTRY_PATH, value={
                 REGISTRY_KNOWN_CUSTOMER: (name, winreg.REG_SZ),
                 REGISTRY_FUNCTION_RESULT: ("0", winreg.REG_SZ),
